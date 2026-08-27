@@ -21,16 +21,45 @@ class StudentController extends Controller
         return Student::where('student_number', end($parts))->first();
     }
 
+    // {id} can be the row id or the student number, since that is the id the
+    // page actually knows about
+    private function findStudent($id)
+    {
+        return Student::with(['academicRecords', 'emergencyContacts'])
+            ->where('student_id', $id)
+            ->orWhere('student_number', $id)
+            ->first();
+    }
+
     // only faculty and admins get to browse other students, see the use case diagram
     private function isStaff()
     {
         return in_array(Auth::user()->role, ['administrator', 'faculty']);
     }
 
+    // admin or profile owner, same check as the activity diagram
+    private function canTouch(Student $student)
+    {
+        if ($this->isStaff()) {
+            return true;
+        }
+
+        $own = $this->currentStudent();
+
+        return $own && $own->student_id === $student->student_id;
+    }
+
+    private function notFound()
+    {
+        return response()->json([
+            'message' => 'Student not found.',
+        ], 404);
+    }
+
     private function forbidden()
     {
         return response()->json([
-            'message' => 'You are not allowed to view other student records.',
+            'message' => 'You are not allowed to open this student record.',
         ], 403);
     }
 
@@ -48,34 +77,36 @@ class StudentController extends Controller
         ]);
     }
 
-    // GET /api/student-info/me
-    public function me()
+    // GET /api/student-info/{id}
+    public function show($id)
     {
-        $student = $this->currentStudent();
+        $student = $this->findStudent($id);
 
+        // 404 when there's no student with that id, same as our sequence diagram
         if (! $student) {
-            return response()->json([
-                'message' => 'No student record linked to this account.',
-            ], 404);
+            return $this->notFound();
         }
 
-        $student->load(['academicRecords', 'emergencyContacts']);
+        if (! $this->canTouch($student)) {
+            return $this->forbidden();
+        }
 
         return response()->json([
             'data' => $student,
         ]);
     }
 
-    // PUT /api/student-info/me
-    // self edit only, so no role check needed, whoever is logged in owns this row
-    public function updateMe(Request $request)
+    // PUT /api/student-info/{id}
+    public function update(Request $request, $id)
     {
-        $student = $this->currentStudent();
+        $student = $this->findStudent($id);
 
         if (! $student) {
-            return response()->json([
-                'message' => 'No student record linked to this account.',
-            ], 404);
+            return $this->notFound();
+        }
+
+        if (! $this->canTouch($student)) {
+            return $this->forbidden();
         }
 
         // only contact details, the registrar stuff like course and gpa is not editable here
@@ -97,15 +128,17 @@ class StudentController extends Controller
         ]);
     }
 
-    // POST /api/student-info/me/photo
-    public function uploadPhoto(Request $request)
+    // PUT /api/student-info/{id}/photo
+    public function updatePhoto(Request $request, $id)
     {
-        $student = $this->currentStudent();
+        $student = $this->findStudent($id);
 
         if (! $student) {
-            return response()->json([
-                'message' => 'No student record linked to this account.',
-            ], 404);
+            return $this->notFound();
+        }
+
+        if (! $this->canTouch($student)) {
+            return $this->forbidden();
         }
 
         $request->validate([
@@ -127,32 +160,6 @@ class StudentController extends Controller
 
         return response()->json([
             'message' => 'Profile picture updated.',
-            'data' => $student,
-        ]);
-    }
-
-    // GET /api/student-info/{id}
-    public function show($id)
-    {
-        $student = Student::with(['academicRecords', 'emergencyContacts'])->find($id);
-
-        // 404 when there's no student with that id, same as our sequence diagram
-        if (! $student) {
-            return response()->json([
-                'message' => 'Student not found.',
-            ], 404);
-        }
-
-        // a student can only open their own record, staff can open anyone's
-        if (! $this->isStaff()) {
-            $own = $this->currentStudent();
-
-            if (! $own || $own->student_id !== $student->student_id) {
-                return $this->forbidden();
-            }
-        }
-
-        return response()->json([
             'data' => $student,
         ]);
     }

@@ -16,7 +16,7 @@ import {
 import api from '../../services/api';
 
 // Group 5 - Student Information Module
-// pulls the logged in student from GET /student-info/me
+// pulls the logged in student from GET /student-info/{id}
 // sidebar + topbar are already in Layout.jsx, this file is just the white panel
 
 const MAROON = '#80172B'; // school color, used in the id badge and avatar border
@@ -155,6 +155,17 @@ function Panel({ children }) {
 // the five fields a student is allowed to change, everything else is registrar data
 const EDITABLE = ['nickname', 'civil_status', 'contact_number', 'email_address', 'address'];
 
+// login saves the account in localStorage, and the last part of the username is
+// the student number (DelaCruz_Juan_C1234 -> C1234). that is the id we ask for.
+function myStudentNumber() {
+  try {
+    const user = JSON.parse(localStorage.getItem('user'));
+    return user?.username?.split('_').pop() || null;
+  } catch {
+    return null;
+  }
+}
+
 // the token only lasts an hour, so 401 here means the session ran out
 const SESSION_EXPIRED = 'Your session has expired. Please sign in again.';
 
@@ -193,10 +204,18 @@ export default function StudentProfile() {
   const [uploading, setUploading] = useState(false);
   const [photoError, setPhotoError] = useState('');
 
+  const studentNumber = myStudentNumber();
+
   useEffect(() => {
+    if (!studentNumber) {
+      setError('Could not tell which student account you are signed in as.');
+      setLoading(false);
+      return;
+    }
+
     // api.js already attaches the token from localStorage
     api
-      .get('/student-info/me')
+      .get(`/student-info/${studentNumber}`)
       .then((res) => setStudent(toStudent(res.data.data)))
       .catch((err) => {
         setError(
@@ -206,7 +225,7 @@ export default function StudentProfile() {
         );
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [studentNumber]);
 
   // ?? '' so a null column starts as an empty box, not the word null
   function startEdit() {
@@ -233,7 +252,7 @@ export default function StudentProfile() {
     setSaveError('');
 
     api
-      .put('/student-info/me', form)
+      .put(`/student-info/${studentNumber}`, form)
       .then((res) => {
         setStudent(toStudent(res.data.data));
         setEditing(false);
@@ -275,7 +294,9 @@ export default function StudentProfile() {
     api
       // api.js forces json content-type, which breaks uploads. clearing it lets
       // the browser set the multipart boundary.
-      .post('/student-info/me/photo', data, { headers: { 'Content-Type': undefined } })
+      .put(`/student-info/${studentNumber}/photo`, data, {
+        headers: { 'Content-Type': undefined },
+      })
       .then((res) => setStudent(toStudent(res.data.data)))
       .catch((err) => {
         setPhotoError(readError(err, 'Upload failed. Please try again.'));
