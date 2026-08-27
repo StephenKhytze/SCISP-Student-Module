@@ -155,6 +155,9 @@ function Panel({ children }) {
 // the five fields a student is allowed to change, everything else is registrar data
 const EDITABLE = ['nickname', 'civil_status', 'contact_number', 'email_address', 'address'];
 
+// the two tabs that have something you can change
+const EDITABLE_TABS = ['personal', 'emergency'];
+
 // login saves the account in localStorage, and the last part of the username is
 // the student number (DelaCruz_Juan_C1234 -> C1234). that is the id we ask for.
 function myStudentNumber() {
@@ -234,17 +237,43 @@ export default function StudentProfile() {
     EDITABLE.forEach((key) => {
       next[key] = raw[key] ?? '';
     });
+
+    const contact = raw.emergency_contacts?.[0] || {};
+    next.emergency_contact = {
+      contact_name: contact.contact_name ?? '',
+      contact_number: contact.contact_number ?? '',
+      relationship: contact.relationship ?? '',
+    };
+
     setForm(next);
     setSaveError('');
     setEditing(true);
-    setActiveTab('personal'); // the editable fields all live in that tab
+
+    if (!EDITABLE_TABS.includes(activeTab)) {
+      setActiveTab('personal');
+    }
   }
 
-  // leaving the tab while editing would hide the inputs but keep the buttons
+  // academic info is registrar data, so drop out of edit mode when you go there
   function switchTab(id) {
     setActiveTab(id);
-    setEditing(false);
-    setSaveError('');
+
+    if (editing && !EDITABLE_TABS.includes(id)) {
+      setEditing(false);
+      setSaveError('');
+    }
+  }
+
+  // prev not form, or two edits in the same tick wipe each other out
+  function setField(key, value) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function setContact(key, value) {
+    setForm((prev) => ({
+      ...prev,
+      emergency_contact: { ...prev.emergency_contact, [key]: value },
+    }));
   }
 
   function saveEdit() {
@@ -402,7 +431,7 @@ export default function StudentProfile() {
           </p>
         </div>
 
-        {/* only edits the personal details tab */}
+        {/* edits the personal and emergency tabs */}
         <div className="sm:ml-auto sm:self-start">
           {editing ? (
             <div className="flex gap-2">
@@ -488,7 +517,7 @@ export default function StudentProfile() {
                   <TextInput
                     label="Nickname"
                     value={form.nickname}
-                    onChange={(v) => setForm({ ...form, nickname: v })}
+                    onChange={(v) => setField('nickname', v)}
                   />
                 )}
               </Field>
@@ -500,7 +529,7 @@ export default function StudentProfile() {
                   <TextInput
                     label="Civil Status"
                     value={form.civil_status}
-                    onChange={(v) => setForm({ ...form, civil_status: v })}
+                    onChange={(v) => setField('civil_status', v)}
                   />
                 )}
               </Field>
@@ -520,7 +549,7 @@ export default function StudentProfile() {
                   <TextInput
                     label="Main Contact"
                     value={form.contact_number}
-                    onChange={(v) => setForm({ ...form, contact_number: v })}
+                    onChange={(v) => setField('contact_number', v)}
                   />
                 )}
               </Field>
@@ -530,7 +559,7 @@ export default function StudentProfile() {
                   <TextInput
                     label="Personal Email"
                     value={form.email_address}
-                    onChange={(v) => setForm({ ...form, email_address: v })}
+                    onChange={(v) => setField('email_address', v)}
                   />
                 )}
               </Field>
@@ -545,7 +574,7 @@ export default function StudentProfile() {
                   <TextInput
                     label="Address"
                     value={form.address}
-                    onChange={(v) => setForm({ ...form, address: v })}
+                    onChange={(v) => setField('address', v)}
                   />
                 )}
               </Field>
@@ -606,14 +635,40 @@ export default function StudentProfile() {
             title="Emergency Contact"
             subtitle="Designated Person & Phone Hotline"
           >
-            <Field label="Contact Person Name" value={emergency.contactName} icon={User} />
+            <Field label="Contact Person Name" value={emergency.contactName} icon={User}>
+              {editing && (
+                <TextInput
+                  label="Contact Person Name"
+                  value={form.emergency_contact.contact_name}
+                  onChange={(v) => setContact('contact_name', v)}
+                />
+              )}
+            </Field>
+
             <Field
               label="Contact Phone Number"
               value={emergency.contactPhone}
               icon={Phone}
               tone="green"
-            />
-            <Field label="Relationship / Guardian" value={emergency.relationship} icon={Users} />
+            >
+              {editing && (
+                <TextInput
+                  label="Contact Phone Number"
+                  value={form.emergency_contact.contact_number}
+                  onChange={(v) => setContact('contact_number', v)}
+                />
+              )}
+            </Field>
+
+            <Field label="Relationship / Guardian" value={emergency.relationship} icon={Users}>
+              {editing && (
+                <TextInput
+                  label="Relationship / Guardian"
+                  value={form.emergency_contact.relationship}
+                  onChange={(v) => setContact('relationship', v)}
+                />
+              )}
+            </Field>
           </InfoCard>
           {/* left the 2nd column empty so the card doesn't stretch the whole row */}
         </div>
