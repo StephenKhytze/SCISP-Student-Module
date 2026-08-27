@@ -5,6 +5,7 @@ namespace App\Http\Controllers\StudentInfo;
 use App\Http\Controllers\Controller;
 use App\Models\Student;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 
@@ -63,6 +64,23 @@ class StudentController extends Controller
         ], 403);
     }
 
+    // the page only shows one contact, so we update the first row or make it
+    private function saveEmergencyContact(Student $student, array $fields)
+    {
+        $existing = $student->emergencyContacts()->first();
+
+        if ($existing) {
+            $existing->update($fields);
+
+            return;
+        }
+
+        // no point making a row with no name on it
+        if (! empty($fields['contact_name'])) {
+            $student->emergencyContacts()->create($fields);
+        }
+    }
+
     // GET /api/student-info
     public function index()
     {
@@ -117,9 +135,17 @@ class StudentController extends Controller
             'address' => 'nullable|string|max:255',
             'email_address' => 'nullable|email|max:150|unique:students,email_address,'
                 .$student->student_id.',student_id',
+            'emergency_contact.contact_name' => 'nullable|string|max:100',
+            'emergency_contact.contact_number' => 'nullable|string|max:20',
+            'emergency_contact.relationship' => 'nullable|string|max:50',
         ]);
 
-        $student->update($validated);
+        $student->update(Arr::except($validated, 'emergency_contact'));
+
+        if ($request->has('emergency_contact')) {
+            $this->saveEmergencyContact($student, $validated['emergency_contact'] ?? []);
+        }
+
         $student->load(['academicRecords', 'emergencyContacts']);
 
         return response()->json([
