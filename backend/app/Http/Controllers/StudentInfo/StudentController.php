@@ -26,10 +26,22 @@ class StudentController extends Controller
     // page actually knows about
     private function findStudent($id)
     {
-        return Student::with(['academicRecords', 'emergencyContacts'])
-            ->where('student_id', $id)
-            ->orWhere('student_number', $id)
+        $student = Student::with(['academicRecords', 'emergencyContacts'])
+            ->where('student_number', $id)
             ->first();
+
+        if ($student) {
+            return $student;
+        }
+
+        // only fall back to the row id for a plain number. mysql turns "00001"
+        // into 1 when it compares against a bigint, which used to hand back the
+        // wrong student for usernames like Admin_User_00001.
+        if ((string) (int) $id !== (string) $id) {
+            return null;
+        }
+
+        return Student::with(['academicRecords', 'emergencyContacts'])->find($id);
     }
 
     // only faculty and admins get to browse other students, see the use case diagram
