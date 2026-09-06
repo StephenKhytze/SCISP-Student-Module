@@ -72,6 +72,9 @@ Route::middleware('auth.jwt')->group(function () {
     Route::prefix('student-info')->group(function () {
         Route::get('/', [StudentController::class, 'index']);
         // Group 5: Add more student info routes here
+        Route::get('/{id}', [StudentController::class, 'show']);
+        Route::put('/{id}', [StudentController::class, 'update']);
+        Route::put('/{id}/photo', [StudentController::class, 'updatePhoto']);
     });
 
     Route::prefix('faculty')->group(function () {
