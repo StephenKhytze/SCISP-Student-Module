@@ -28,8 +28,5 @@ class DatabaseSeeder extends Seeder
             'role' => 'administrator',
             'status' => 'active',
         ]);
-
-        // Group 5: student info sample data
-        $this->call(StudentSeeder::class);
     }
 }
