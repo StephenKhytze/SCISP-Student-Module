@@ -221,11 +221,16 @@ export default function StudentProfile() {
       .get(`/student-info/${studentNumber}`)
       .then((res) => setStudent(toStudent(res.data.data)))
       .catch((err) => {
-        setError(
-          err.response?.status === 404
-            ? 'No student record is linked to this account yet.'
-            : readError(err, 'Unable to load your student information right now.')
-        );
+        if (err.response?.status === 404) {
+          // usually means the students table is empty on a fresh setup
+          console.warn(
+            `No student row with student_number "${studentNumber}". ` +
+              'Run: docker compose exec backend php artisan db:seed --class=StudentSeeder'
+          );
+          setError('No student record is linked to this account yet.');
+          return;
+        }
+        setError(readError(err, 'Unable to load your student information right now.'));
       })
       .finally(() => setLoading(false));
   }, [studentNumber]);
