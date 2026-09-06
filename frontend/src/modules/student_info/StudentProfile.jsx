@@ -15,6 +15,9 @@ import {
 } from 'lucide-react';
 import api from '../../services/api';
 import StudentDirectory, { StudentDetail } from './StudentDirectory';
+import StudentForm from './StudentForm';
+import ActivityLogPanel from './ActivityLogPanel';
+import { myRole, myStudentNumber } from './role';
 
 // Group 5 - Student Information Module
 // pulls the logged in student from GET /student-info/{id}
@@ -159,17 +162,6 @@ const EDITABLE = ['nickname', 'civil_status', 'contact_number', 'email_address',
 // the two tabs that have something you can change
 const EDITABLE_TABS = ['personal', 'emergency'];
 
-// login saves the account in localStorage, and the last part of the username is
-// the student number (DelaCruz_Juan_C1234 -> C1234). that is the id we ask for.
-function myStudentNumber() {
-  try {
-    const user = JSON.parse(localStorage.getItem('user'));
-    return user?.username?.split('_').pop() || null;
-  } catch {
-    return null;
-  }
-}
-
 // the token only lasts an hour, so 401 here means the session ran out
 const SESSION_EXPIRED = 'Your session has expired. Please sign in again.';
 
@@ -194,29 +186,46 @@ function TextInput({ label, value, onChange }) {
   );
 }
 
-// login stores the role as Student / Teacher / Admin
-function myRole() {
-  try {
-    return JSON.parse(localStorage.getItem('user'))?.role || 'Student';
-  } catch {
-    return 'Student';
-  }
-}
-
-// same page, two different screens. faculty and admin browse the registry,
-// a student lands straight on their own profile.
+// same page, different screens by role. a student lands on their own profile,
+// faculty and admin get the registry with the admin actions on top.
 export default function StudentProfile() {
   const [openStudent, setOpenStudent] = useState(null);
+  const [panel, setPanel] = useState('list');
 
-  if (myRole() !== 'Student') {
-    return openStudent ? (
-      <StudentDetail studentNumber={openStudent} onBack={() => setOpenStudent(null)} />
-    ) : (
-      <StudentDirectory onOpenStudent={setOpenStudent} />
+  if (myRole() === 'Student') {
+    return <MyProfile />;
+  }
+
+  const backToList = () => {
+    setOpenStudent(null);
+    setPanel('list');
+  };
+
+  if (panel === 'add') {
+    return <StudentForm onSaved={backToList} onCancel={backToList} />;
+  }
+
+  if (panel === 'logs') {
+    return <ActivityLogPanel onBack={backToList} />;
+  }
+
+  if (openStudent) {
+    return (
+      <StudentDetail
+        studentNumber={openStudent}
+        onBack={backToList}
+        onArchived={backToList}
+      />
     );
   }
 
-  return <MyProfile />;
+  return (
+    <StudentDirectory
+      onOpenStudent={setOpenStudent}
+      onAdd={() => setPanel('add')}
+      onLogs={() => setPanel('logs')}
+    />
+  );
 }
 
 function MyProfile() {

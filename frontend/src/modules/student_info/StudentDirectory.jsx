@@ -1,6 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Search, Users, GraduationCap, Filter, ArrowLeft } from 'lucide-react';
+import {
+  Search,
+  Users,
+  GraduationCap,
+  Filter,
+  ArrowLeft,
+  UserPlus,
+  Download,
+  ScrollText,
+  Archive,
+} from 'lucide-react';
 import api from '../../services/api';
+import { isAdmin } from './role';
 
 const MAROON = '#80172B';
 
@@ -30,7 +41,8 @@ function statusPill(status) {
   );
 }
 
-export default function StudentDirectory({ onOpenStudent }) {
+export default function StudentDirectory({ onOpenStudent, onAdd, onLogs }) {
+  const [exporting, setExporting] = useState(false);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -81,6 +93,26 @@ export default function StudentDirectory({ onOpenStudent }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // the export needs the auth header, so fetch it first then hand the browser
+  // a blob to save instead of pointing a link straight at the url
+  function downloadCsv() {
+    setExporting(true);
+    setError('');
+
+    api
+      .get('/student-info/export', { responseType: 'blob' })
+      .then((res) => {
+        const url = URL.createObjectURL(res.data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'students.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+      })
+      .catch(() => setError('Could not export the student list.'))
+      .finally(() => setExporting(false));
+  }
+
   function clearAll() {
     const empty = { term: '', course: '', year: '', status: '' };
     setTerm('');
@@ -110,6 +142,36 @@ export default function StudentDirectory({ onOpenStudent }) {
         <span className="ml-auto text-[12px] font-bold text-slate-400">
           {students.length} {students.length === 1 ? 'record' : 'records'}
         </span>
+
+        {isAdmin() && (
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+            <button
+              type="button"
+              onClick={onAdd}
+              className="flex items-center gap-2 rounded-[10px] bg-[#182848] px-4 py-2 text-[13px] font-bold text-white"
+            >
+              <UserPlus className="h-[15px] w-[15px]" strokeWidth={2} />
+              Add Student
+            </button>
+            <button
+              type="button"
+              onClick={downloadCsv}
+              disabled={exporting}
+              className="flex items-center gap-2 rounded-[10px] border border-slate-200 px-4 py-2 text-[13px] font-bold text-[#182848] disabled:opacity-50"
+            >
+              <Download className="h-[15px] w-[15px]" strokeWidth={2} />
+              {exporting ? 'Preparing...' : 'Export CSV'}
+            </button>
+            <button
+              type="button"
+              onClick={onLogs}
+              className="flex items-center gap-2 rounded-[10px] border border-slate-200 px-4 py-2 text-[13px] font-bold text-[#182848]"
+            >
+              <ScrollText className="h-[15px] w-[15px]" strokeWidth={2} />
+              Activity Logs
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="mt-6 border-t border-slate-100 pt-6">
@@ -251,10 +313,32 @@ export default function StudentDirectory({ onOpenStudent }) {
 }
 
 // read only detail, faculty opens this from the table
-export function StudentDetail({ studentNumber, onBack }) {
+export function StudentDetail({ studentNumber, onBack, onArchived }) {
   const [student, setStudent] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [confirming, setConfirming] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+
+  function archive() {
+    setArchiving(true);
+    setError('');
+
+    api
+      .delete(`/student-info/${studentNumber}`)
+      .then(() => onArchived())
+      .catch((err) =>
+        setError(
+          err.response?.status === 403
+            ? 'Only an administrator can archive a student record.'
+            : err.response?.data?.message || 'Could not archive that student record.'
+        )
+      )
+      .finally(() => {
+        setArchiving(false);
+        setConfirming(false);
+      });
+  }
 
   useEffect(() => {
     api
@@ -317,7 +401,49 @@ export function StudentDetail({ studentNumber, onBack }) {
                 </p>
               </div>
               <span className="ml-auto">{statusPill(student.enrollment_status)}</span>
+
+              {isAdmin() && !confirming && (
+                <button
+                  type="button"
+                  onClick={() => setConfirming(true)}
+                  className="flex items-center gap-2 rounded-[10px] border border-slate-200 px-4 py-2 text-[13px] font-bold text-[#182848]"
+                >
+                  <Archive className="h-[15px] w-[15px]" strokeWidth={2} />
+                  Archive
+                </button>
+              )}
             </div>
+
+            {/* archiving hides the record from everyone, so ask first */}
+            {confirming && (
+              <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <p className="text-[13px] font-bold text-[#182848]">
+                  Archive {fullName(student)}?
+                </p>
+                <p className="mt-1 text-[12px] font-medium text-slate-600">
+                  The record stays in the database but drops out of the student list.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={archive}
+                    disabled={archiving}
+                    className="rounded-[10px] px-4 py-2 text-[13px] font-bold text-white disabled:opacity-50"
+                    style={{ backgroundColor: MAROON }}
+                  >
+                    {archiving ? 'Archiving...' : 'Yes, archive'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirming(false)}
+                    disabled={archiving}
+                    className="rounded-[10px] border border-slate-300 px-4 py-2 text-[13px] font-bold text-[#182848] disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="mt-6 grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
               {rows.map(([label, value]) => (
