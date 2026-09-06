@@ -14,6 +14,7 @@ import {
   Shield,
 } from 'lucide-react';
 import api from '../../services/api';
+import StudentDirectory, { StudentDetail } from './StudentDirectory';
 
 // Group 5 - Student Information Module
 // pulls the logged in student from GET /student-info/{id}
@@ -193,7 +194,32 @@ function TextInput({ label, value, onChange }) {
   );
 }
 
+// login stores the role as Student / Teacher / Admin
+function myRole() {
+  try {
+    return JSON.parse(localStorage.getItem('user'))?.role || 'Student';
+  } catch {
+    return 'Student';
+  }
+}
+
+// same page, two different screens. faculty and admin browse the registry,
+// a student lands straight on their own profile.
 export default function StudentProfile() {
+  const [openStudent, setOpenStudent] = useState(null);
+
+  if (myRole() !== 'Student') {
+    return openStudent ? (
+      <StudentDetail studentNumber={openStudent} onBack={() => setOpenStudent(null)} />
+    ) : (
+      <StudentDirectory onOpenStudent={setOpenStudent} />
+    );
+  }
+
+  return <MyProfile />;
+}
+
+function MyProfile() {
   const [activeTab, setActiveTab] = useState('personal');
   const [student, setStudent] = useState(null);
   const [error, setError] = useState('');
