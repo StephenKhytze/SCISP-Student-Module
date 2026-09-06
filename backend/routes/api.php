@@ -72,16 +72,9 @@ Route::middleware('auth.jwt')->group(function () {
     Route::prefix('student-info')->group(function () {
         Route::get('/', [StudentController::class, 'index']);
         // Group 5: Add more student info routes here
-        // the fixed paths have to stay above /{id} or the wildcard eats them
-        Route::get('/search', [StudentController::class, 'search']);
-        Route::get('/filter', [StudentController::class, 'filter']);
-        Route::get('/activity-logs', [StudentController::class, 'activityLogs']);
-        Route::get('/export', [StudentController::class, 'export']);
-        Route::post('/', [StudentController::class, 'store']);
         Route::get('/{id}', [StudentController::class, 'show']);
         Route::put('/{id}', [StudentController::class, 'update']);
         Route::put('/{id}/photo', [StudentController::class, 'updatePhoto']);
-        Route::delete('/{id}', [StudentController::class, 'archive']);
     });
 
     Route::prefix('faculty')->group(function () {

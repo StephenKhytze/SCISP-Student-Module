@@ -27,7 +27,6 @@ class Student extends Model
         'profile_picture',
         'enrollment_status',
         'date_enrolled',
-        'archived_at',
     ];
 
     protected function casts(): array
