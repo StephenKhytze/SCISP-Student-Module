@@ -50,16 +50,29 @@ class StudentController extends Controller
         return in_array(Auth::user()->role, ['administrator', 'faculty']);
     }
 
-    // admin or profile owner, same check as the activity diagram
-    private function canTouch(Student $student)
+    private function isAdmin()
     {
-        if ($this->isStaff()) {
-            return true;
-        }
+        return Auth::user()->role === 'administrator';
+    }
 
+    private function owns(Student $student)
+    {
         $own = $this->currentStudent();
 
         return $own && $own->student_id === $student->student_id;
+    }
+
+    // staff or profile owner, same check as the activity diagram
+    private function canTouch(Student $student)
+    {
+        return $this->isStaff() || $this->owns($student);
+    }
+
+    // faculty only get to look. changing a record is the admin's job, or the
+    // student's own contact details.
+    private function canEdit(Student $student)
+    {
+        return $this->isAdmin() || $this->owns($student);
     }
 
     private function notFound()
@@ -90,6 +103,17 @@ class StudentController extends Controller
         // no point making a row with no name on it
         if (! empty($fields['contact_name'])) {
             $student->emergencyContacts()->create($fields);
+        }
+    }
+
+    // the page only shows the current record, so the admin edits that one.
+    // enrolling a student in a new term is the registrar's job, not ours.
+    private function saveAcademicRecord(Student $student, array $fields)
+    {
+        $existing = $student->academicRecords()->first();
+
+        if ($existing) {
+            $existing->update($fields);
         }
     }
 
@@ -135,12 +159,12 @@ class StudentController extends Controller
             return $this->notFound();
         }
 
-        if (! $this->canTouch($student)) {
+        if (! $this->canEdit($student)) {
             return $this->forbidden();
         }
 
-        // only contact details, the registrar stuff like course and gpa is not editable here
-        $validated = $request->validate([
+        // what a student may change about themselves, just contact details
+        $rules = [
             'nickname' => 'nullable|string|max:50',
             'civil_status' => 'nullable|string|max:20',
             'contact_number' => 'nullable|string|max:20',
@@ -150,12 +174,37 @@ class StudentController extends Controller
             'emergency_contact.contact_name' => 'nullable|string|max:100',
             'emergency_contact.contact_number' => 'nullable|string|max:20',
             'emergency_contact.relationship' => 'nullable|string|max:50',
-        ]);
+        ];
 
-        $student->update(Arr::except($validated, 'emergency_contact'));
+        // everything the student can only read is still the admin's to fix
+        if ($this->isAdmin()) {
+            $rules += [
+                'gender' => 'nullable|string|max:20',
+                'date_of_birth' => 'nullable|date',
+                'institutional_email' => 'nullable|email|max:150',
+                'enrollment_status' => 'nullable|string|max:50',
+                'date_enrolled' => 'nullable|date',
+                'academic_record.course' => 'nullable|string|max:100',
+                'academic_record.year_level' => 'nullable|integer|min:1|max:6',
+                'academic_record.section' => 'nullable|string|max:50',
+                'academic_record.total_units' => 'nullable|integer|min:0|max:99',
+                'academic_record.cumulative_gpa' => 'nullable|numeric|min:0|max:5',
+                'academic_record.academic_standing' => 'nullable|string|max:50',
+            ];
+        }
+
+        // validate() drops keys it wasn't given a rule for, so a student posting
+        // an admin field just gets it ignored instead of saved
+        $validated = $request->validate($rules);
+
+        $student->update(Arr::except($validated, ['emergency_contact', 'academic_record']));
 
         if ($request->has('emergency_contact')) {
             $this->saveEmergencyContact($student, $validated['emergency_contact'] ?? []);
+        }
+
+        if (isset($validated['academic_record'])) {
+            $this->saveAcademicRecord($student, $validated['academic_record']);
         }
 
         $student->load(['academicRecords', 'emergencyContacts']);
@@ -175,7 +224,8 @@ class StudentController extends Controller
             return $this->notFound();
         }
 
-        if (! $this->canTouch($student)) {
+        // the student uploads their own, the admin can replace it for them
+        if (! $this->canEdit($student)) {
             return $this->forbidden();
         }
 
