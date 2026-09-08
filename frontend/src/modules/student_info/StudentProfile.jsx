@@ -31,6 +31,12 @@ const show = (value) => (value === null || value === undefined || value === '' ?
 
 const dateOnly = (value) => (value ? String(value).slice(0, 10) : '-');
 
+// the db only stores the course code, the header spells it out
+const DEGREES = {
+  BSIT: 'Bachelor of Science in Information Technology',
+  BSCS: 'Bachelor of Science in Computer Science',
+};
+
 // year_level is just a number in the db, page wants "3rd Year"
 function yearLabel(level) {
   if (!level) return '-';
@@ -42,6 +48,9 @@ function toStudent(row) {
   const record = row.academic_records?.[0] || {};
   const contact = row.emergency_contacts?.[0] || {};
 
+  // spelled out course name, falls back to the college for a code we don't know
+  const degree = DEGREES[record.course] || show(record.department);
+
   return {
     raw: row, // keep the original around so the edit form starts with real values
     idNumber: show(row.student_number),
@@ -51,7 +60,7 @@ function toStudent(row) {
     program: show(record.course),
     yearLevel: yearLabel(record.year_level),
     section: show(record.section),
-    college: show(record.department),
+    degree,
     registry: 'Official Student Registry',
 
     personal: {
@@ -72,7 +81,7 @@ function toStudent(row) {
       enrolledLoad: record.total_units != null ? `${record.total_units} Units` : '-',
       initialEnrollment: dateOnly(row.date_enrolled),
       enrollmentStatus: show(row.enrollment_status),
-      collegeFaculty: show(record.department),
+      collegeFaculty: degree,
       academicStanding: show(record.academic_standing),
       institutionalEmail: show(row.institutional_email),
     },
@@ -103,7 +112,9 @@ const ICON_TONE = {
   amber: 'text-amber-500',
 };
 
-// pass children instead of value if it needs a badge and not plain text
+// pass children instead of value if it needs a badge and not plain text.
+// the icon sits at the top so it stays put when a long value wraps to a
+// second line, which it does now instead of getting cut off.
 function Field({ label, value, icon: Icon, tone = 'default', className = '', children }) {
   return (
     <div className={`min-w-0 ${className}`}>
@@ -111,9 +122,16 @@ function Field({ label, value, icon: Icon, tone = 'default', className = '', chi
       {children ? (
         <div className="mt-3">{children}</div>
       ) : (
-        <div className="mt-3 flex items-center gap-2">
-          {Icon && <Icon className={`h-[14px] w-[14px] shrink-0 ${ICON_TONE[tone]}`} strokeWidth={2} />}
-          <span className={`truncate text-[13.5px] font-bold ${VALUE_TONE[tone]}`} title={value}>
+        <div className="mt-3 flex items-start gap-2">
+          {Icon && (
+            <Icon
+              className={`mt-[3px] h-[14px] w-[14px] shrink-0 ${ICON_TONE[tone]}`}
+              strokeWidth={2}
+            />
+          )}
+          {/* min-w-0 or the flex item refuses to shrink and a long email
+              runs past the edge of the card instead of wrapping */}
+          <span className={`min-w-0 break-words text-[13.5px] font-bold ${VALUE_TONE[tone]}`}>
             {value}
           </span>
         </div>
@@ -155,17 +173,71 @@ function Panel({ children }) {
 // the five fields a student is allowed to change, everything else is registrar data
 const EDITABLE = ['nickname', 'civil_status', 'contact_number', 'email_address', 'address'];
 
-// the two tabs that have something you can change
-const EDITABLE_TABS = ['personal', 'emergency'];
+// the registrar columns. a student only reads these, the admin can fix them.
+const ADMIN_EDITABLE = [
+  'gender',
+  'date_of_birth',
+  'institutional_email',
+  'enrollment_status',
+  'date_enrolled',
+];
 
-// login saves the account in localStorage, and the last part of the username is
-// the student number (DelaCruz_Juan_C1234 -> C1234). that is the id we ask for.
-function myStudentNumber() {
+// same idea but these live in academic_records, not students
+const ADMIN_RECORD = [
+  'course',
+  'year_level',
+  'section',
+  'total_units',
+  'cumulative_gpa',
+  'academic_standing',
+];
+
+// the two date columns need yyyy-mm-dd for <input type="date">
+const DATE_FIELDS = ['date_of_birth', 'date_enrolled'];
+
+// login saves the whole account in localStorage
+function currentUser() {
   try {
-    return JSON.parse(localStorage.getItem('user'))?.username?.split('_').pop() || null;
+    return JSON.parse(localStorage.getItem('user'));
   } catch {
     return null;
   }
+}
+
+// no user_id column in students, so the last part of the username is the
+// student number (DelaCruz_Juan_C1234 -> C1234). that is the id we ask for.
+function myStudentNumber(user) {
+  return user?.username?.split('_').pop() || null;
+}
+
+// admin and faculty have no student row of their own, so they pick whose
+// record to open instead
+function StudentPicker({ roster, value, onChange, readOnly }) {
+  return (
+    <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+      <label
+        htmlFor="student-record"
+        className="text-[10px] font-bold uppercase tracking-[0.09em] text-slate-400"
+      >
+        Student Record
+      </label>
+      <select
+        id="student-record"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[13px] font-bold text-[#182848] focus:border-[#182848] focus:outline-none"
+      >
+        {roster.map((row) => (
+          <option key={row.student_number} value={row.student_number}>
+            {row.student_number} - {row.last_name}, {row.first_name}
+          </option>
+        ))}
+      </select>
+      {readOnly && (
+        <span className="text-[11px] font-bold text-slate-400">View only</span>
+      )}
+    </div>
+  );
 }
 
 // the token only lasts an hour, so 401 here means the session ran out
@@ -180,10 +252,10 @@ function readError(err, fallback) {
   return fallback;
 }
 
-function TextInput({ label, value, onChange }) {
+function TextInput({ label, value, onChange, type = 'text' }) {
   return (
     <input
-      type="text"
+      type={type}
       value={value}
       aria-label={label}
       onChange={(e) => onChange(e.target.value)}
@@ -193,6 +265,17 @@ function TextInput({ label, value, onChange }) {
 }
 
 export default function StudentProfile() {
+  const user = currentUser();
+
+  // login saves a label, not the db role. administrator comes back as "Admin"
+  // and faculty as "Teacher", so match those.
+  const isAdmin = user?.role === 'Admin';
+  const isStaff = isAdmin || user?.role === 'Teacher';
+
+  // a student always lands on their own record, staff pick one from the list
+  const [studentNumber, setStudentNumber] = useState(isStaff ? '' : myStudentNumber(user));
+  const [roster, setRoster] = useState([]);
+
   const [activeTab, setActiveTab] = useState('personal');
   const [student, setStudent] = useState(null);
   const [error, setError] = useState('');
@@ -205,15 +288,52 @@ export default function StudentProfile() {
 
   const [uploading, setUploading] = useState(false);
   const [photoError, setPhotoError] = useState('');
+  const [preview, setPreview] = useState(null);
 
-  const studentNumber = myStudentNumber();
+  // drop the old blob url whenever a new one replaces it, or on leaving the page
+  useEffect(() => {
+    return () => {
+      if (preview) URL.revokeObjectURL(preview);
+    };
+  }, [preview]);
+
+  // staff get the whole list first, then we open whoever is on top
+  useEffect(() => {
+    if (!isStaff) return;
+
+    api
+      .get('/student-info')
+      .then((res) => {
+        const list = res.data.data || [];
+        setRoster(list);
+
+        if (list.length) {
+          setStudentNumber(list[0].student_number);
+        } else {
+          setError('There are no student records to show yet.');
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        setError(readError(err, 'Unable to load the student list right now.'));
+        setLoading(false);
+      });
+  }, [isStaff]);
 
   useEffect(() => {
     if (!studentNumber) {
-      setError('Could not tell which student account you are signed in as.');
-      setLoading(false);
+      // staff are still waiting on the list above, so no complaint yet
+      if (!isStaff) {
+        setError('Could not tell which student account you are signed in as.');
+        setLoading(false);
+      }
       return;
     }
+
+    setLoading(true);
+    setError('');
+    setEditing(false);
+    setPreview(null); // otherwise the last upload sticks to the next record
 
     // api.js already attaches the token from localStorage
     api
@@ -232,7 +352,7 @@ export default function StudentProfile() {
         setError(readError(err, 'Unable to load your student information right now.'));
       })
       .finally(() => setLoading(false));
-  }, [studentNumber]);
+  }, [studentNumber, isStaff]);
 
   // ?? '' so a null column starts as an empty box, not the word null
   function startEdit() {
@@ -249,23 +369,28 @@ export default function StudentProfile() {
       relationship: contact.relationship ?? '',
     };
 
+    if (isAdmin) {
+      ADMIN_EDITABLE.forEach((key) => {
+        // the api hands back a full timestamp, the date box only wants the day
+        next[key] = DATE_FIELDS.includes(key) ? dateOnly(raw[key]) : (raw[key] ?? '');
+      });
+
+      const record = raw.academic_records?.[0] || {};
+      next.academic_record = {};
+      ADMIN_RECORD.forEach((key) => {
+        next.academic_record[key] = record[key] ?? '';
+      });
+    }
+
     setForm(next);
     setSaveError('');
     setEditing(true);
-
-    if (!EDITABLE_TABS.includes(activeTab)) {
-      setActiveTab('personal');
-    }
   }
 
-  // academic info is registrar data, so drop out of edit mode when you go there
+  // edit mode stays on across every tab. for a student the academic tab just
+  // has no inputs, since course and gpa belong to the registrar.
   function switchTab(id) {
     setActiveTab(id);
-
-    if (editing && !EDITABLE_TABS.includes(id)) {
-      setEditing(false);
-      setSaveError('');
-    }
   }
 
   // prev not form, or two edits in the same tick wipe each other out
@@ -277,6 +402,13 @@ export default function StudentProfile() {
     setForm((prev) => ({
       ...prev,
       emergency_contact: { ...prev.emergency_contact, [key]: value },
+    }));
+  }
+
+  function setRecord(key, value) {
+    setForm((prev) => ({
+      ...prev,
+      academic_record: { ...prev.academic_record, [key]: value },
     }));
   }
 
@@ -321,6 +453,10 @@ export default function StudentProfile() {
     setUploading(true);
     setPhotoError('');
 
+    // show the picked file straight away. the upload can take a while on a cold
+    // server and waiting for it made the photo look like it never loaded.
+    setPreview(URL.createObjectURL(file));
+
     const data = new FormData();
     data.append('photo', file);
 
@@ -333,6 +469,7 @@ export default function StudentProfile() {
       .then((res) => setStudent(toStudent(res.data.data)))
       .catch((err) => {
         setPhotoError(readError(err, 'Upload failed. Please try again.'));
+        setPreview(null); // put the old photo back, the new one never saved
       })
       .finally(() => {
         setUploading(false);
@@ -340,9 +477,21 @@ export default function StudentProfile() {
       });
   }
 
+  // keep the dropdown up on the loading and error screens too, or a staff
+  // account that picks a bad record has no way back
+  const picker = roster.length > 0 && (
+    <StudentPicker
+      roster={roster}
+      value={studentNumber}
+      onChange={setStudentNumber}
+      readOnly={!isAdmin}
+    />
+  );
+
   if (loading) {
     return (
       <Panel>
+        {picker}
         <p className="text-[13px] font-bold text-slate-400">Loading student information...</p>
       </Panel>
     );
@@ -351,6 +500,7 @@ export default function StudentProfile() {
   if (error) {
     return (
       <Panel>
+        {picker}
         <p className="text-[13px] font-bold text-[#182848]">{error}</p>
         {error !== SESSION_EXPIRED && (
           <p className="mt-2 text-[12px] font-medium text-slate-400">
@@ -363,37 +513,60 @@ export default function StudentProfile() {
 
   const { personal, academic, emergency } = student;
 
+  // faculty only get to look, so no edit button and no photo upload for them
+  const mayEdit = isAdmin || !isStaff;
+
+  // the freshly picked file wins until the page is reloaded, so the portrait
+  // appears the moment you choose it instead of after the upload finishes
+  const photoSrc = preview || (student.profilePicture && `${API_ORIGIN}${student.profilePicture}`);
+
   return (
     <div className="mx-auto w-full max-w-[1280px] rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
+      {picker}
+
       <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-6">
         {/* click the photo to change it, hidden input does the actual upload */}
         <div className="shrink-0">
           <label
-            className="group relative flex h-[90px] w-[90px] cursor-pointer items-center justify-center overflow-hidden rounded-xl border-2 bg-slate-100 shadow-sm"
+            className={`group relative flex h-[90px] w-[90px] items-center justify-center overflow-hidden rounded-xl border-2 bg-slate-100 shadow-sm ${
+              mayEdit ? 'cursor-pointer' : ''
+            }`}
             style={{ borderColor: MAROON }}
-            title="Click to change photo"
+            title={mayEdit ? 'Click to change photo' : undefined}
           >
-            {student.profilePicture ? (
+            {photoSrc ? (
+              /* object-top keeps the head in frame, centred cropping was
+                 cutting the hair off the top of a portrait shot */
               <img
-                src={`${API_ORIGIN}${student.profilePicture}`}
+                src={photoSrc}
                 alt={`Portrait of ${student.fullName}`}
-                className="h-full w-full object-cover"
+                className="h-full w-full object-cover object-top"
               />
             ) : (
               <User className="h-10 w-10 text-slate-300" strokeWidth={1.5} />
             )}
 
-            <span className="absolute inset-x-0 bottom-0 bg-black/55 py-1 text-center text-[9px] font-bold uppercase tracking-wider text-white opacity-0 transition-opacity group-hover:opacity-100">
-              {uploading ? 'Uploading' : 'Change'}
-            </span>
+            {/* "Change" only shows on hover, but the upload bar always shows.
+                a slow upload used to look like nothing happened at all. */}
+            {mayEdit && (
+              <span
+                className={`absolute inset-x-0 bottom-0 bg-black/55 py-1 text-center text-[9px] font-bold uppercase tracking-wider text-white transition-opacity ${
+                  uploading ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                }`}
+              >
+                {uploading ? 'Uploading...' : 'Change'}
+              </span>
+            )}
 
-            <input
-              type="file"
-              accept="image/jpeg,image/png"
-              className="hidden"
-              disabled={uploading}
-              onChange={handlePhoto}
-            />
+            {mayEdit && (
+              <input
+                type="file"
+                accept="image/jpeg,image/png"
+                className="hidden"
+                disabled={uploading}
+                onChange={handlePhoto}
+              />
+            )}
           </label>
 
           {photoError && (
@@ -429,15 +602,15 @@ export default function StudentProfile() {
           </p>
 
           <p className="mt-1.5 text-[12px] font-medium text-slate-400">
-            {student.college}
+            {student.degree}
             <span className="mx-1.5 text-slate-300">&bull;</span>
             {student.registry}
           </p>
         </div>
 
-        {/* edits the personal and emergency tabs */}
+        {/* a student edits their own contact details, the admin edits the rest */}
         <div className="sm:ml-auto sm:self-start">
-          {editing ? (
+          {!mayEdit ? null : editing ? (
             <div className="flex gap-2">
               <button
                 type="button"
@@ -526,7 +699,17 @@ export default function StudentProfile() {
                 )}
               </Field>
 
-              <Field label="Sex" value={personal.sex} icon={User} />
+              {/* sex and birthdate are registrar data, so only the admin
+                  gets a box for them */}
+              <Field label="Sex" value={personal.sex} icon={User}>
+                {editing && isAdmin && (
+                  <TextInput
+                    label="Sex"
+                    value={form.gender}
+                    onChange={(v) => setField('gender', v)}
+                  />
+                )}
+              </Field>
 
               <Field label="Civil Status" value={personal.civilStatus} icon={User}>
                 {editing && (
@@ -538,7 +721,16 @@ export default function StudentProfile() {
                 )}
               </Field>
 
-              <Field label="Birthdate" value={personal.birthdate} icon={Calendar} />
+              <Field label="Birthdate" value={personal.birthdate} icon={Calendar}>
+                {editing && isAdmin && (
+                  <TextInput
+                    label="Birthdate"
+                    type="date"
+                    value={form.date_of_birth}
+                    onChange={(v) => setField('date_of_birth', v)}
+                  />
+                )}
+              </Field>
             </InfoCard>
 
             <InfoCard
@@ -597,12 +789,71 @@ export default function StudentProfile() {
             title="Academic Enrollment"
             subtitle="Program, Standing & Units"
           >
-            <Field label="Degree Program" value={academic.degreeProgram} icon={BookOpen} />
-            <Field label="Year Standing" value={academic.yearStanding} icon={Award} />
-            <Field label="Class Section" value={academic.classSection} icon={Users} />
-            <Field label="Cumulative GPA" value={academic.cumulativeGpa} icon={Award} tone="green" />
-            <Field label="Enrolled Load" value={academic.enrolledLoad} icon={FileText} />
-            <Field label="Initial Enrollment" value={academic.initialEnrollment} icon={Calendar} />
+            {/* the whole academic tab is registrar data. a student just reads
+                it, the admin is the one who corrects it. */}
+            <Field label="Degree Program" value={academic.degreeProgram} icon={BookOpen}>
+              {editing && isAdmin && (
+                <TextInput
+                  label="Degree Program"
+                  value={form.academic_record.course}
+                  onChange={(v) => setRecord('course', v)}
+                />
+              )}
+            </Field>
+
+            <Field label="Year Standing" value={academic.yearStanding} icon={Award}>
+              {editing && isAdmin && (
+                <TextInput
+                  label="Year Standing"
+                  type="number"
+                  value={form.academic_record.year_level}
+                  onChange={(v) => setRecord('year_level', v)}
+                />
+              )}
+            </Field>
+
+            <Field label="Class Section" value={academic.classSection} icon={Users}>
+              {editing && isAdmin && (
+                <TextInput
+                  label="Class Section"
+                  value={form.academic_record.section}
+                  onChange={(v) => setRecord('section', v)}
+                />
+              )}
+            </Field>
+
+            <Field label="Cumulative GPA" value={academic.cumulativeGpa} icon={Award} tone="green">
+              {editing && isAdmin && (
+                <TextInput
+                  label="Cumulative GPA"
+                  type="number"
+                  value={form.academic_record.cumulative_gpa}
+                  onChange={(v) => setRecord('cumulative_gpa', v)}
+                />
+              )}
+            </Field>
+
+            <Field label="Enrolled Load" value={academic.enrolledLoad} icon={FileText}>
+              {editing && isAdmin && (
+                <TextInput
+                  label="Enrolled Load"
+                  type="number"
+                  value={form.academic_record.total_units}
+                  onChange={(v) => setRecord('total_units', v)}
+                />
+              )}
+            </Field>
+
+            <Field label="Initial Enrollment" value={academic.initialEnrollment} icon={Calendar}>
+              {editing && isAdmin && (
+                <TextInput
+                  label="Initial Enrollment"
+                  type="date"
+                  value={form.date_enrolled}
+                  onChange={(v) => setField('date_enrolled', v)}
+                />
+              )}
+            </Field>
           </InfoCard>
 
           <InfoCard
@@ -613,18 +864,46 @@ export default function StudentProfile() {
             subtitle="Faculty, Honors & Registry"
           >
             <Field label="Enrollment Status">
-              <span className="inline-flex rounded-md bg-[#e8f8ef] px-2.5 py-1 text-[12px] font-bold text-emerald-700">
-                {academic.enrollmentStatus}
-              </span>
+              {editing && isAdmin ? (
+                <TextInput
+                  label="Enrollment Status"
+                  value={form.enrollment_status}
+                  onChange={(v) => setField('enrollment_status', v)}
+                />
+              ) : (
+                <span className="inline-flex rounded-md bg-[#e8f8ef] px-2.5 py-1 text-[12px] font-bold text-emerald-700">
+                  {academic.enrollmentStatus}
+                </span>
+              )}
             </Field>
+
+            {/* no box here, this one is spelled out from the degree program above */}
             <Field label="College / Faculty" value={academic.collegeFaculty} icon={Building2} />
+
             <Field
               label="Academic Standing"
               value={academic.academicStanding}
               icon={Award}
               tone="amber"
-            />
-            <Field label="Institutional Email" value={academic.institutionalEmail} icon={Mail} />
+            >
+              {editing && isAdmin && (
+                <TextInput
+                  label="Academic Standing"
+                  value={form.academic_record.academic_standing}
+                  onChange={(v) => setRecord('academic_standing', v)}
+                />
+              )}
+            </Field>
+
+            <Field label="Institutional Email" value={academic.institutionalEmail} icon={Mail}>
+              {editing && isAdmin && (
+                <TextInput
+                  label="Institutional Email"
+                  value={form.institutional_email}
+                  onChange={(v) => setField('institutional_email', v)}
+                />
+              )}
+            </Field>
           </InfoCard>
         </div>
       )}
