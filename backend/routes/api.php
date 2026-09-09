@@ -75,6 +75,7 @@ Route::middleware('auth.jwt')->group(function () {
         Route::get('/{id}', [StudentController::class, 'show']);
         Route::put('/{id}', [StudentController::class, 'update']);
         Route::put('/{id}/photo', [StudentController::class, 'updatePhoto']);
+        Route::delete('/{id}/photo', [StudentController::class, 'deletePhoto']);
     });
 
     Route::prefix('faculty')->group(function () {

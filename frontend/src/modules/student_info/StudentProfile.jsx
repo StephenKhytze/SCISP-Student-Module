@@ -12,6 +12,8 @@ import {
   FileText,
   Building2,
   Shield,
+  Search,
+  ChevronLeft,
 } from 'lucide-react';
 import api from '../../services/api';
 
@@ -210,33 +212,112 @@ function myStudentNumber(user) {
   return user?.username?.split('_').pop() || null;
 }
 
-// admin and faculty have no student row of their own, so they pick whose
-// record to open instead
-function StudentPicker({ roster, value, onChange, readOnly }) {
+// green only for enrolled, or the whole list looks fine at a glance when it
+// is not
+const STATUS_TONE = {
+  Enrolled: 'bg-[#e8f8ef] text-emerald-700',
+  Pending: 'bg-amber-50 text-amber-700',
+};
+
+const STATUS_FALLBACK = 'bg-slate-100 text-slate-500';
+
+// admin and faculty have no student row of their own, so they search for the
+// record they want instead of landing on one
+function StudentSearch({ roster, term, onTerm, onOpen, readOnly }) {
+  const q = term.trim().toLowerCase();
+
+  // matches the id or any part of the name, whichever they typed
+  const results = q
+    ? roster.filter((row) =>
+        `${row.student_number} ${row.first_name} ${row.last_name}`.toLowerCase().includes(q)
+      )
+    : roster;
+
   return (
-    <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-      <label
-        htmlFor="student-record"
-        className="text-[10px] font-bold uppercase tracking-[0.09em] text-slate-400"
-      >
-        Student Record
-      </label>
-      <select
-        id="student-record"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[13px] font-bold text-[#182848] focus:border-[#182848] focus:outline-none"
-      >
-        {roster.map((row) => (
-          <option key={row.student_number} value={row.student_number}>
-            {row.student_number} - {row.last_name}, {row.first_name}
-          </option>
-        ))}
-      </select>
-      {readOnly && (
-        <span className="text-[11px] font-bold text-slate-400">View only</span>
+    <Panel>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 className="text-[24px] font-extrabold leading-tight tracking-tight text-[#182848]">
+            Student Records
+          </h2>
+          <p className="mt-1 text-[12.5px] font-medium text-slate-400">
+            {readOnly ? 'View a student profile' : 'Open a student to view or edit the profile'}
+          </p>
+        </div>
+        <span className="text-[11px] font-bold uppercase tracking-[0.09em] text-slate-400">
+          {results.length} of {roster.length}
+        </span>
+      </div>
+
+      <div className="relative mt-5">
+        <Search
+          className="pointer-events-none absolute left-3.5 top-1/2 h-[15px] w-[15px] -translate-y-1/2 text-slate-400"
+          strokeWidth={2}
+        />
+        <input
+          type="search"
+          value={term}
+          onChange={(e) => onTerm(e.target.value)}
+          placeholder="Search by name or student number"
+          aria-label="Search students"
+          className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 text-[13.5px] font-bold text-[#182848] placeholder:font-medium placeholder:text-slate-400 focus:border-[#182848] focus:outline-none"
+        />
+      </div>
+
+      {roster.length === 0 ? (
+        /* an empty table is not a failed search, so it does not get the
+           "no match" wording */
+        <p className="mt-6 text-[13px] font-bold text-slate-400">
+          There are no student records yet.
+        </p>
+      ) : results.length === 0 ? (
+        <p className="mt-6 text-[13px] font-bold text-slate-400">
+          No student matches &ldquo;{term.trim()}&rdquo;.
+        </p>
+      ) : (
+        <ul className="mt-5 divide-y divide-slate-100 border-t border-slate-100">
+          {results.map((row) => {
+            const record = row.academic_records?.[0] || {};
+            return (
+              <li key={row.student_number}>
+                <button
+                  type="button"
+                  onClick={() => onOpen(row.student_number)}
+                  className="flex w-full flex-wrap items-center gap-x-4 gap-y-1.5 px-1 py-3.5 text-left hover:bg-slate-50 focus:outline-none focus-visible:bg-slate-50"
+                >
+                  <span
+                    className="shrink-0 rounded-md bg-[#fdf0f2] px-2.5 py-1 font-mono text-[11px] font-bold tracking-tight"
+                    style={{ color: MAROON }}
+                  >
+                    {row.student_number}
+                  </span>
+
+                  <span className="min-w-0 grow text-[14px] font-bold text-[#182848]">
+                    {row.last_name}, {row.first_name}
+                  </span>
+
+                  <span className="text-[12px] font-medium text-slate-400">
+                    {show(record.course)}
+                    <span className="mx-1.5 text-slate-300">&bull;</span>
+                    {yearLabel(record.year_level)}
+                    <span className="mx-1.5 text-slate-300">&bull;</span>
+                    {show(record.section)}
+                  </span>
+
+                  <span
+                    className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.08em] ${
+                      STATUS_TONE[row.enrollment_status] || STATUS_FALLBACK
+                    }`}
+                  >
+                    {show(row.enrollment_status)}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       )}
-    </div>
+    </Panel>
   );
 }
 
@@ -252,15 +333,64 @@ function readError(err, fallback) {
   return fallback;
 }
 
-function TextInput({ label, value, onChange, type = 'text' }) {
+function TextInput({ label, value, onChange, type = 'text', min, max, step }) {
   return (
     <input
       type={type}
       value={value}
       aria-label={label}
+      min={min}
+      max={max}
+      step={step}
       onChange={(e) => onChange(e.target.value)}
       className="w-full rounded-md border border-slate-200 px-2.5 py-1.5 text-[13.5px] font-bold text-[#182848] focus:border-[#182848] focus:outline-none"
     />
+  );
+}
+
+// the registrar only uses these four, so a dropdown beats a text box. keeps
+// the spelling the same on every record.
+const STANDINGS = ['Good Standing', "Dean's List Scholar", "President's Lister", 'On Probation'];
+
+// the three the registrar actually uses, same list as the pills in the search
+const ENROLLMENT_STATUSES = ['Enrolled', 'Not Enrolled', 'Pending'];
+
+// both courses run four years, so there is no 5th or 6th to pick
+const YEAR_LEVELS = [
+  { value: 1, label: '1st Year' },
+  { value: 2, label: '2nd Year' },
+  { value: 3, label: '3rd Year' },
+  { value: 4, label: '4th Year' },
+];
+
+// 1.00 is the highest mark on our scale and 5.00 the lowest, so the box only
+// takes something in between
+const GPA_BEST = 1;
+const GPA_WORST = 5;
+
+function SelectInput({ label, value, onChange, options }) {
+  const list = options.map((o) => (typeof o === 'object' ? o : { value: o, label: o }));
+
+  // an older row might hold something not on the list, so keep it selectable
+  const known = list.some((o) => String(o.value) === String(value));
+  if (value !== '' && value != null && !known) {
+    list.unshift({ value, label: value });
+  }
+
+  return (
+    <select
+      value={value}
+      aria-label={label}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[13.5px] font-bold text-[#182848] focus:border-[#182848] focus:outline-none"
+    >
+      <option value="">-</option>
+      {list.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -272,9 +402,11 @@ export default function StudentProfile() {
   const isAdmin = user?.role === 'Admin';
   const isStaff = isAdmin || user?.role === 'Teacher';
 
-  // a student always lands on their own record, staff pick one from the list
+  // a student always lands on their own record. staff start with no record
+  // open, which is what shows the search screen.
   const [studentNumber, setStudentNumber] = useState(isStaff ? '' : myStudentNumber(user));
   const [roster, setRoster] = useState([]);
+  const [term, setTerm] = useState('');
 
   const [activeTab, setActiveTab] = useState('personal');
   const [student, setStudent] = useState(null);
@@ -287,6 +419,7 @@ export default function StudentProfile() {
   const [saveError, setSaveError] = useState('');
 
   const [uploading, setUploading] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const [photoError, setPhotoError] = useState('');
   const [preview, setPreview] = useState(null);
 
@@ -297,27 +430,16 @@ export default function StudentProfile() {
     };
   }, [preview]);
 
-  // staff get the whole list first, then we open whoever is on top
+  // staff get the whole list once, then the search box filters it here instead
+  // of asking the server on every keystroke
   useEffect(() => {
     if (!isStaff) return;
 
     api
       .get('/student-info')
-      .then((res) => {
-        const list = res.data.data || [];
-        setRoster(list);
-
-        if (list.length) {
-          setStudentNumber(list[0].student_number);
-        } else {
-          setError('There are no student records to show yet.');
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        setError(readError(err, 'Unable to load the student list right now.'));
-        setLoading(false);
-      });
+      .then((res) => setRoster(res.data.data || []))
+      .catch((err) => setError(readError(err, 'Unable to load the student list right now.')))
+      .finally(() => setLoading(false));
   }, [isStaff]);
 
   useEffect(() => {
@@ -412,6 +534,19 @@ export default function StudentProfile() {
     }));
   }
 
+  // taking someone off the roll takes their load with it. they are not
+  // sitting in any subject this term, so the units cannot stay at 21.
+  function setStatus(value) {
+    setForm((prev) => ({
+      ...prev,
+      enrollment_status: value,
+      academic_record: {
+        ...prev.academic_record,
+        total_units: value === 'Not Enrolled' ? 0 : prev.academic_record.total_units,
+      },
+    }));
+  }
+
   function saveEdit() {
     setSaving(true);
     setSaveError('');
@@ -419,7 +554,15 @@ export default function StudentProfile() {
     api
       .put(`/student-info/${studentNumber}`, form)
       .then((res) => {
-        setStudent(toStudent(res.data.data));
+        const row = res.data.data;
+        setStudent(toStudent(row));
+
+        // the list is fetched once, so drop the saved row back into it or
+        // going back shows the old course and section
+        setRoster((prev) =>
+          prev.map((r) => (r.student_number === row.student_number ? row : r))
+        );
+
         setEditing(false);
       })
       .catch((err) => {
@@ -477,21 +620,42 @@ export default function StudentProfile() {
       });
   }
 
-  // keep the dropdown up on the loading and error screens too, or a staff
-  // account that picks a bad record has no way back
-  const picker = roster.length > 0 && (
-    <StudentPicker
-      roster={roster}
-      value={studentNumber}
-      onChange={setStudentNumber}
-      readOnly={!isAdmin}
-    />
+  function removePhoto() {
+    setRemoving(true);
+    setPhotoError('');
+
+    api
+      .delete(`/student-info/${studentNumber}/photo`)
+      .then((res) => {
+        // the blob would keep showing the photo we just deleted
+        setPreview(null);
+        setStudent(toStudent(res.data.data));
+      })
+      .catch((err) => setPhotoError(readError(err, 'Could not remove the photo.')))
+      .finally(() => setRemoving(false));
+  }
+
+  // closes the open record and brings staff back to the list
+  function backToList() {
+    setEditing(false);
+    setError('');
+    setStudentNumber('');
+  }
+
+  const backLink = isStaff && (
+    <button
+      type="button"
+      onClick={backToList}
+      className="mb-5 flex items-center gap-1 text-[12px] font-bold text-slate-400 hover:text-[#182848] focus:outline-none focus-visible:text-[#182848]"
+    >
+      <ChevronLeft className="h-[15px] w-[15px]" strokeWidth={2.5} />
+      Back to student records
+    </button>
   );
 
   if (loading) {
     return (
       <Panel>
-        {picker}
         <p className="text-[13px] font-bold text-slate-400">Loading student information...</p>
       </Panel>
     );
@@ -500,13 +664,36 @@ export default function StudentProfile() {
   if (error) {
     return (
       <Panel>
-        {picker}
+        {backLink}
         <p className="text-[13px] font-bold text-[#182848]">{error}</p>
         {error !== SESSION_EXPIRED && (
           <p className="mt-2 text-[12px] font-medium text-slate-400">
             Try refreshing the page. If it keeps failing, sign out and sign in again.
           </p>
         )}
+      </Panel>
+    );
+  }
+
+  // staff land here first, and come back here from the back link
+  if (isStaff && !studentNumber) {
+    return (
+      <StudentSearch
+        roster={roster}
+        term={term}
+        onTerm={setTerm}
+        onOpen={setStudentNumber}
+        readOnly={!isAdmin}
+      />
+    );
+  }
+
+  // one render happens between clicking a name and the effect starting the
+  // fetch, and there is no student to show yet on that pass
+  if (!student) {
+    return (
+      <Panel>
+        <p className="text-[13px] font-bold text-slate-400">Loading student information...</p>
       </Panel>
     );
   }
@@ -522,7 +709,7 @@ export default function StudentProfile() {
 
   return (
     <div className="mx-auto w-full max-w-[1280px] rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
-      {picker}
+      {backLink}
 
       <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-6">
         {/* click the photo to change it, hidden input does the actual upload */}
@@ -568,6 +755,20 @@ export default function StudentProfile() {
               />
             )}
           </label>
+
+          {/* only while editing, so it is out of the way when you are just
+              looking. outside the label on purpose too, a button inside it
+              would open the file picker instead of removing anything. */}
+          {editing && student.profilePicture && (
+            <button
+              type="button"
+              onClick={removePhoto}
+              disabled={uploading || removing}
+              className="mt-2 w-[90px] text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-rose-600 disabled:opacity-50"
+            >
+              {removing ? 'Removing...' : 'Remove photo'}
+            </button>
+          )}
 
           {photoError && (
             <p className="mt-2 max-w-[90px] text-[10px] font-bold leading-tight text-rose-600">
@@ -803,11 +1004,11 @@ export default function StudentProfile() {
 
             <Field label="Year Standing" value={academic.yearStanding} icon={Award}>
               {editing && isAdmin && (
-                <TextInput
+                <SelectInput
                   label="Year Standing"
-                  type="number"
                   value={form.academic_record.year_level}
                   onChange={(v) => setRecord('year_level', v)}
+                  options={YEAR_LEVELS}
                 />
               )}
             </Field>
@@ -827,6 +1028,9 @@ export default function StudentProfile() {
                 <TextInput
                   label="Cumulative GPA"
                   type="number"
+                  min={GPA_BEST}
+                  max={GPA_WORST}
+                  step="0.01"
                   value={form.academic_record.cumulative_gpa}
                   onChange={(v) => setRecord('cumulative_gpa', v)}
                 />
@@ -865,10 +1069,11 @@ export default function StudentProfile() {
           >
             <Field label="Enrollment Status">
               {editing && isAdmin ? (
-                <TextInput
+                <SelectInput
                   label="Enrollment Status"
                   value={form.enrollment_status}
-                  onChange={(v) => setField('enrollment_status', v)}
+                  onChange={setStatus}
+                  options={ENROLLMENT_STATUSES}
                 />
               ) : (
                 <span className="inline-flex rounded-md bg-[#e8f8ef] px-2.5 py-1 text-[12px] font-bold text-emerald-700">
@@ -887,10 +1092,11 @@ export default function StudentProfile() {
               tone="amber"
             >
               {editing && isAdmin && (
-                <TextInput
+                <SelectInput
                   label="Academic Standing"
                   value={form.academic_record.academic_standing}
                   onChange={(v) => setRecord('academic_standing', v)}
+                  options={STANDINGS}
                 />
               )}
             </Field>
