@@ -756,10 +756,10 @@ export default function StudentProfile() {
             )}
           </label>
 
-          {/* only while editing, so it is out of the way when you are just
-              looking. outside the label on purpose too, a button inside it
-              would open the file picker instead of removing anything. */}
-          {editing && student.profilePicture && (
+          {/* the student decides whether their own photo stays up, so staff
+              never see this. only while editing too, and outside the label on
+              purpose, a button inside it would open the file picker instead. */}
+          {!isStaff && editing && student.profilePicture && (
             <button
               type="button"
               onClick={removePhoto}

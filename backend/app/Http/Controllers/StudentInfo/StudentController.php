@@ -265,7 +265,7 @@ class StudentController extends Controller
     }
 
     // DELETE /api/student-info/{id}/photo
-    // not everyone wants a photo up, so they can take it back down
+    // not everyone wants a photo up, so they can take their own back down
     public function deletePhoto($id)
     {
         $student = $this->findStudent($id);
@@ -274,7 +274,9 @@ class StudentController extends Controller
             return $this->notFound();
         }
 
-        if (! $this->canEdit($student)) {
+        // owner only, not canEdit like the rest. whether a photo stays up is
+        // the student's call, so not even the admin takes it down for them.
+        if (! $this->owns($student)) {
             return $this->forbidden();
         }
 
