@@ -182,14 +182,19 @@ class StudentController extends Controller
                 'gender' => 'nullable|string|max:20',
                 'date_of_birth' => 'nullable|date',
                 'institutional_email' => 'nullable|email|max:150',
-                'enrollment_status' => 'nullable|string|max:50',
+                'enrollment_status' => 'nullable|in:Enrolled,Not Enrolled,Pending',
                 'date_enrolled' => 'nullable|date',
                 'academic_record.course' => 'nullable|string|max:100',
-                'academic_record.year_level' => 'nullable|integer|min:1|max:6',
+                // both courses are four year programs, no 5th or 6th year
+                'academic_record.year_level' => 'nullable|integer|min:1|max:4',
                 'academic_record.section' => 'nullable|string|max:50',
                 'academic_record.total_units' => 'nullable|integer|min:0|max:99',
-                'academic_record.cumulative_gpa' => 'nullable|numeric|min:0|max:5',
-                'academic_record.academic_standing' => 'nullable|string|max:50',
+                // 1.00 is the highest mark on our scale, 5.00 the lowest
+                'academic_record.cumulative_gpa' => 'nullable|numeric|min:1|max:5',
+                // the page offers these four in a dropdown, so the server only
+                // takes those four. keeps the spelling the same everywhere.
+                'academic_record.academic_standing' => 'nullable|in:Good Standing,'
+                    ."Dean's List Scholar,President's Lister,On Probation",
             ];
         }
 
@@ -205,6 +210,13 @@ class StudentController extends Controller
 
         if (isset($validated['academic_record'])) {
             $this->saveAcademicRecord($student, $validated['academic_record']);
+        }
+
+        // a student who is off the roll is not sitting in any subject, so the
+        // load goes with the status. catches the case where only the status
+        // was sent and the old 21 units would have stayed behind.
+        if ($student->enrollment_status === 'Not Enrolled') {
+            $this->saveAcademicRecord($student, ['total_units' => 0]);
         }
 
         $student->load(['academicRecords', 'emergencyContacts']);
@@ -248,6 +260,35 @@ class StudentController extends Controller
 
         return response()->json([
             'message' => 'Profile picture updated.',
+            'data' => $student,
+        ]);
+    }
+
+    // DELETE /api/student-info/{id}/photo
+    // not everyone wants a photo up, so they can take it back down
+    public function deletePhoto($id)
+    {
+        $student = $this->findStudent($id);
+
+        if (! $student) {
+            return $this->notFound();
+        }
+
+        if (! $this->canEdit($student)) {
+            return $this->forbidden();
+        }
+
+        // no complaint if there is nothing to remove, the page ends up the
+        // same either way
+        if ($student->profile_picture) {
+            Storage::disk('public')->delete($student->profile_picture);
+            $student->update(['profile_picture' => null]);
+        }
+
+        $student->load(['academicRecords', 'emergencyContacts']);
+
+        return response()->json([
+            'message' => 'Profile picture removed.',
             'data' => $student,
         ]);
     }
