@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bell, GraduationCap, Check, Shield, Crown, UserCheck, Laptop, LogOut } from 'lucide-react';
+import { Bell, GraduationCap, Check, Shield, Crown, UserCheck, Laptop, LogOut, Menu, X } from 'lucide-react';
 
 export default function Topbar({
   currentUser = { name: 'Juan Dela Cruz', role: 'Student', department: 'IT', idNumber: '12345' },
@@ -10,6 +10,8 @@ export default function Topbar({
   onSelectUser = () => {},
   onOpenTechSpec = () => {},
   onLogout = () => {},
+  onToggleMobileNav = () => {},
+  isMobileNavOpen = false,
 }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
@@ -22,8 +24,19 @@ export default function Topbar({
 
   return (
     <header className="h-[86px] bg-[#80172B] text-white flex items-center justify-between pr-8 select-none relative z-30 shadow-md border-b-2 border-[#651020]" style={{ paddingLeft: '32px' }}>
-      {/* Left: ABC SCHOOL Brand Logo */}
+      {/* Left: Mobile menu toggle + ABC SCHOOL Brand Logo */}
       <div className="flex items-center space-x-3">
+        <button
+          onClick={() => {
+            setShowNotifications(false);
+            setShowUserDropdown(false);
+            onToggleMobileNav();
+          }}
+          className="md:hidden p-2 -ml-1 hover:bg-white/10 rounded-full transition-colors focus:outline-none"
+          aria-label="Toggle navigation menu"
+        >
+          {isMobileNavOpen ? <X className="w-6 h-6 text-white" /> : <Menu className="w-6 h-6 text-white" />}
+        </button>
         <div className="flex items-center cursor-pointer group" onClick={() => window.location.reload()}>
           {/* ABC SCHOOL Emblem Replica matching template */}
           <div className="relative flex items-center">
@@ -46,6 +59,8 @@ export default function Topbar({
             onClick={() => {
               setShowNotifications(!showNotifications);
               setShowUserDropdown(false);
+              // close the mobile menu so it doesn't cover the notifications
+              if (isMobileNavOpen) onToggleMobileNav();
             }}
             className="p-2 hover:bg-white/10 rounded-full transition-colors relative cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/30"
             aria-label="Notifications"
@@ -92,7 +107,8 @@ export default function Topbar({
           )}
         </div>
 
-        {/* Vertical Divider */}
+        {/* Divider + Persona Profile - hidden on mobile, shown in the sidebar drawer instead */}
+        <div className="hidden md:flex items-center space-x-5 sm:space-x-6">
         <div className="h-7 w-[1px] bg-white/20" />
 
         {/* User Persona Profile (Exact Match to Template Image) */}
@@ -106,7 +122,7 @@ export default function Topbar({
             title="Switch User Role / View Profile"
           >
             {/* Persona Name & Role */}
-            <div className="text-right flex flex-col justify-center leading-tight">
+            <div className="hidden sm:flex text-right flex-col justify-center leading-tight">
               <span className="font-bold text-base tracking-wide text-white group-hover:text-amber-100 transition-colors">
                 {currentUser.name}
               </span>
@@ -186,6 +202,7 @@ export default function Topbar({
               </div>
             </div>
           )}
+        </div>
         </div>
       </div>
     </header>
