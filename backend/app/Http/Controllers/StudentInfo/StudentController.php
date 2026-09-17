@@ -212,10 +212,9 @@ class StudentController extends Controller
             $this->saveAcademicRecord($student, $validated['academic_record']);
         }
 
-        // a student who is off the roll is not sitting in any subject, so the
-        // load goes with the status. catches the case where only the status
-        // was sent and the old 21 units would have stayed behind.
-        if ($student->enrollment_status === 'Not Enrolled') {
+        // off the roll means no subjects this term, so the load goes to 0 with
+        // the status. admin only, since only the admin can change the status.
+        if ($this->isAdmin() && $student->enrollment_status === 'Not Enrolled') {
             $this->saveAcademicRecord($student, ['total_units' => 0]);
         }
 
@@ -236,8 +235,9 @@ class StudentController extends Controller
             return $this->notFound();
         }
 
-        // the student uploads their own, the admin can replace it for them
-        if (! $this->canEdit($student)) {
+        // owner only, same as removing it. whether a student has a photo up at
+        // all is the student's call, so the admin does not put one up for them.
+        if (! $this->owns($student)) {
             return $this->forbidden();
         }
 
