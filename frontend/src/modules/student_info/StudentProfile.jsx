@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   User,
+  UserRound,
   Users,
   Phone,
   Mail,
@@ -13,15 +14,15 @@ import {
   Building2,
   Shield,
   Search,
+  Hash,
   ChevronLeft,
 } from 'lucide-react';
 import api from '../../services/api';
 
 // Group 5 - Student Information Module
 // pulls the logged in student from GET /student-info/{id}
-// sidebar + topbar are already in Layout.jsx, this file is just the white panel
-
-const MAROON = '#80172B'; // school color, used in the id badge and avatar border
+// sidebar + topbar are already in Layout.jsx. the classes here follow the
+// faculty directory module so every page in the portal looks the same.
 
 // uploaded photos are served by laravel, not vite, so strip the /api part off
 const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace(
@@ -63,7 +64,6 @@ function toStudent(row) {
     yearLevel: yearLabel(record.year_level),
     section: show(record.section),
     degree,
-    registry: 'Official Student Registry',
 
     personal: {
       nickname: show(row.nickname),
@@ -96,81 +96,143 @@ function toStudent(row) {
   };
 }
 
+// short is what fits on a phone and a small laptop, label is the full one for a wide screen
 const TABS = [
-  { id: 'personal', label: 'Personal Details', icon: User },
-  { id: 'academic', label: 'Academic Information', icon: GraduationCap },
-  { id: 'emergency', label: 'Emergency Contacts & Guardian', icon: Shield },
+  { id: 'personal', label: 'Personal Details', short: 'Personal', icon: User },
+  { id: 'academic', label: 'Academic Information', short: 'Academic', icon: GraduationCap },
+  { id: 'emergency', label: 'Emergency Contacts & Guardian', short: 'Emergency', icon: Shield },
 ];
 
 const VALUE_TONE = {
-  default: 'text-[#182848]',
-  green: 'text-emerald-600',
-  amber: 'text-amber-600',
+  default: 'text-gray-700',
+  green: 'text-emerald-700 font-medium',
+  amber: 'text-amber-700 font-medium',
 };
 
 const ICON_TONE = {
-  default: 'text-slate-400',
+  default: 'text-gray-400',
   green: 'text-emerald-500',
   amber: 'text-amber-500',
 };
 
-// pass children instead of value if it needs a badge and not plain text.
-// the icon sits at the top so it stays put when a long value wraps to a
-// second line, which it does now instead of getting cut off.
+// same pill as the faculty availability status, green only for enrolled so a
+// list full of students does not look fine at a glance when it is not
+const STATUS_STYLES = {
+  Enrolled: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  Pending: 'bg-amber-50 text-amber-700 border-amber-200',
+  'Not Enrolled': 'bg-slate-100 text-slate-600 border-slate-200',
+};
+
+const STATUS_DOT = {
+  Enrolled: 'bg-emerald-500',
+  Pending: 'bg-amber-500',
+  'Not Enrolled': 'bg-slate-400',
+};
+
+function StatusPill({ status }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border whitespace-nowrap ${
+        STATUS_STYLES[status] || STATUS_STYLES['Not Enrolled']
+      }`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[status] || 'bg-slate-400'}`} />
+      {show(status)}
+    </span>
+  );
+}
+
+// badge, school year, title and one line under it. same block that opens the
+// faculty directory page.
+function ModuleHeader({ title, description }) {
+  return (
+    <div className="mb-6">
+      <div className="flex flex-wrap items-center gap-2 text-xs mb-2">
+        <span className="bg-[#80172B]/10 text-[#80172B] font-bold uppercase tracking-wide px-2.5 py-1 rounded">
+          Student Information Module
+        </span>
+        <span className="text-gray-400">&middot; Academic Year 2026-2027</span>
+      </div>
+      <h2 className="text-2xl font-extrabold text-gray-900">{title}</h2>
+      <p className="text-sm text-gray-500 mt-1">{description}</p>
+    </div>
+  );
+}
+
+// on a phone the tabs split the row evenly with a one word label so nothing
+// runs off the edge. the full labels only come back on a wide screen.
+function TabBar({ tabs, active, onChange }) {
+  const compact = tabs.length > 1;
+
+  return (
+    <div
+      className={`flex items-center border-b border-gray-200 mb-6 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+        compact ? 'gap-1 sm:gap-2' : 'gap-2'
+      }`}
+    >
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          onClick={() => onChange(tab.id)}
+          aria-pressed={active === tab.id}
+          className={`flex items-center rounded-t-lg font-semibold whitespace-nowrap transition-colors ${
+            compact
+              ? 'flex-1 sm:flex-none flex-col sm:flex-row justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm'
+              : 'shrink-0 gap-2 px-4 py-2.5 text-sm'
+          } ${active === tab.id ? 'bg-[#80172B] text-white' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          <tab.icon className="w-4 h-4" />
+          {compact ? (
+            <>
+              <span className="xl:hidden">{tab.short}</span>
+              <span className="hidden xl:inline">{tab.label}</span>
+            </>
+          ) : (
+            tab.label
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// pass children instead of value if it needs a badge or an input. the value
+// wraps instead of getting cut off, a long email used to run past the card.
 function Field({ label, value, icon: Icon, tone = 'default', className = '', children }) {
   return (
     <div className={`min-w-0 ${className}`}>
-      <p className="text-[10px] font-bold uppercase tracking-[0.09em] text-slate-400">{label}</p>
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase">
+        {/* one text colour per element, two on the same tag and the css order
+            decides which one wins instead of the class list */}
+        {Icon && <Icon className={`w-3.5 h-3.5 shrink-0 ${ICON_TONE[tone]}`} />}
+        <span className="text-gray-400">{label}</span>
+      </div>
       {children ? (
-        <div className="mt-3">{children}</div>
+        <div className="mt-1.5">{children}</div>
       ) : (
-        <div className="mt-3 flex items-start gap-2">
-          {Icon && (
-            <Icon
-              className={`mt-[3px] h-[14px] w-[14px] shrink-0 ${ICON_TONE[tone]}`}
-              strokeWidth={2}
-            />
-          )}
-          {/* min-w-0 or the flex item refuses to shrink and a long email
-              runs past the edge of the card instead of wrapping */}
-          <span className={`min-w-0 break-words text-[13.5px] font-bold ${VALUE_TONE[tone]}`}>
-            {value}
-          </span>
-        </div>
+        <p className={`mt-1.5 text-sm break-words ${VALUE_TONE[tone]}`}>{value}</p>
       )}
     </div>
   );
 }
 
-function InfoCard({ icon: Icon, iconWrapClass, iconClass, title, subtitle, className = '', children }) {
+function InfoCard({ title, className = '', children }) {
   return (
-    <section className={`rounded-xl border border-slate-200 bg-white p-6 ${className}`}>
-      <div className="flex items-center gap-3">
-        <span
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] ${iconWrapClass}`}
-        >
-          <Icon className={`h-[18px] w-[18px] ${iconClass}`} strokeWidth={2} />
-        </span>
-        <div className="min-w-0">
-          <h3 className="text-[17px] font-extrabold leading-tight text-[#182848]">{title}</h3>
-          {subtitle && <p className="mt-1 text-[12px] font-medium text-slate-400">{subtitle}</p>}
-        </div>
-      </div>
-
-      <div className="mt-5 border-t border-slate-100 pt-6">
-        <div className="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2">{children}</div>
-      </div>
+    <section className={`bg-white border border-gray-200 rounded-xl p-5 ${className}`}>
+      <span className="block text-xs font-bold uppercase tracking-wide text-gray-500 mb-4">
+        {title}
+      </span>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{children}</div>
     </section>
   );
 }
 
-function Panel({ children }) {
-  return (
-    <div className="mx-auto w-full max-w-[1280px] rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
-      {children}
-    </div>
-  );
-}
+const PRIMARY_BTN =
+  'flex items-center justify-center gap-1.5 bg-[#80172B] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-[#651020] transition-colors disabled:opacity-50';
+
+const SECONDARY_BTN =
+  'flex items-center justify-center gap-1.5 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50';
 
 // the five fields a student is allowed to change, everything else is registrar data
 const EDITABLE = ['nickname', 'civil_status', 'contact_number', 'email_address', 'address'];
@@ -212,18 +274,71 @@ function myStudentNumber(user) {
   return user?.username?.split('_').pop() || null;
 }
 
-// green only for enrolled, or the whole list looks fine at a glance when it
-// is not
-const STATUS_TONE = {
-  Enrolled: 'bg-[#e8f8ef] text-emerald-700',
-  Pending: 'bg-amber-50 text-amber-700',
-};
+// one card per student, laid out like the faculty card
+function StudentCard({ row, onOpen }) {
+  const record = row.academic_records?.[0] || {};
+  const photo = row.profile_picture_url && `${API_ORIGIN}${row.profile_picture_url}`;
 
-const STATUS_FALLBACK = 'bg-slate-100 text-slate-500';
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5 flex flex-col shadow-sm hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <span className="min-w-0 truncate text-[11px] font-semibold tracking-wide text-gray-400 uppercase">
+          {show(record.department)}
+        </span>
+        <StatusPill status={row.enrollment_status} />
+      </div>
+
+      <div className="flex items-center gap-3 mb-4">
+        {photo ? (
+          <img
+            src={photo}
+            alt={`${row.first_name} ${row.last_name}`}
+            className="w-14 h-14 shrink-0 rounded-full object-cover object-top"
+          />
+        ) : (
+          <div className="w-14 h-14 shrink-0 rounded-full bg-[#80172B]/10 flex items-center justify-center">
+            <UserRound className="w-7 h-7 text-[#80172B]" />
+          </div>
+        )}
+        <div className="min-w-0">
+          <h3 className="font-bold text-gray-900 leading-tight">
+            {row.first_name} {row.last_name}
+          </h3>
+          <p className="text-sm font-semibold text-[#80172B]">
+            {show(record.course)} &middot; {yearLabel(record.year_level)}
+          </p>
+          <p className="text-xs text-gray-500">{show(record.section)}</p>
+        </div>
+      </div>
+
+      <div className="space-y-2 text-sm text-gray-600 mb-4">
+        <div className="flex items-center gap-2">
+          <Hash className="w-4 h-4 text-gray-400 shrink-0" />
+          <span className="font-mono">{row.student_number}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Mail className="w-4 h-4 text-gray-400 shrink-0" />
+          <span className="truncate">{show(row.institutional_email)}</span>
+        </div>
+      </div>
+
+      <div className="mt-auto flex gap-2">
+        <button
+          type="button"
+          onClick={() => onOpen(row.student_number)}
+          className={`flex-1 ${SECONDARY_BTN}`}
+        >
+          <UserRound className="w-4 h-4" />
+          View Profile
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // admin and faculty have no student row of their own, so they search for the
 // record they want instead of landing on one
-function StudentSearch({ roster, term, onTerm, onOpen, readOnly }) {
+function StudentSearch({ roster, term, onTerm, onOpen }) {
   const q = term.trim().toLowerCase();
 
   // matches the id or any part of the name, whichever they typed
@@ -234,104 +349,70 @@ function StudentSearch({ roster, term, onTerm, onOpen, readOnly }) {
     : roster;
 
   return (
-    <Panel>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 className="text-[24px] font-extrabold leading-tight tracking-tight text-[#182848]">
-            Student Records
-          </h2>
-          <p className="mt-1 text-[12.5px] font-medium text-slate-400">
-            {readOnly ? 'View a student profile' : 'Open a student to view or edit the profile'}
-          </p>
-        </div>
-        <span className="text-[11px] font-bold uppercase tracking-[0.09em] text-slate-400">
-          {results.length} of {roster.length}
-        </span>
-      </div>
+    <>
+      <TabBar
+        tabs={[{ id: 'directory', label: `Student Directory (${roster.length})`, icon: Users }]}
+        active="directory"
+        onChange={() => {}}
+      />
 
-      <div className="relative mt-5">
-        <Search
-          className="pointer-events-none absolute left-3.5 top-1/2 h-[15px] w-[15px] -translate-y-1/2 text-slate-400"
-          strokeWidth={2}
-        />
-        <input
-          type="search"
-          value={term}
-          onChange={(e) => onTerm(e.target.value)}
-          placeholder="Search by name or student number"
-          aria-label="Search students"
-          className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 text-[13.5px] font-bold text-[#182848] placeholder:font-medium placeholder:text-slate-400 focus:border-[#182848] focus:outline-none"
-        />
+      <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
+        <span className="block text-xs font-bold uppercase tracking-wide text-gray-500 mb-4">
+          Search Student Records
+        </span>
+
+        <label htmlFor="student-search" className="text-[11px] font-semibold text-gray-400 uppercase">
+          Search Student / Keyword
+        </label>
+        <div className="relative mt-1">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            id="student-search"
+            type="search"
+            value={term}
+            onChange={(e) => onTerm(e.target.value)}
+            placeholder="Search name or student number..."
+            className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#80172B]/30"
+          />
+        </div>
       </div>
 
       {roster.length === 0 ? (
-        /* an empty table is not a failed search, so it does not get the
-           "no match" wording */
-        <p className="mt-6 text-[13px] font-bold text-slate-400">
-          There are no student records yet.
-        </p>
+        // an empty table is not a failed search, so it does not get the
+        // "no match" wording
+        <p className="text-sm text-gray-500">There are no student records yet.</p>
       ) : results.length === 0 ? (
-        <p className="mt-6 text-[13px] font-bold text-slate-400">
-          No student matches &ldquo;{term.trim()}&rdquo;.
-        </p>
+        <p className="text-sm text-gray-500">No student matches &ldquo;{term.trim()}&rdquo;.</p>
       ) : (
-        <ul className="mt-5 divide-y divide-slate-100 border-t border-slate-100">
-          {results.map((row) => {
-            const record = row.academic_records?.[0] || {};
-            return (
-              <li key={row.student_number}>
-                <button
-                  type="button"
-                  onClick={() => onOpen(row.student_number)}
-                  className="flex w-full flex-wrap items-center gap-x-4 gap-y-1.5 px-1 py-3.5 text-left hover:bg-slate-50 focus:outline-none focus-visible:bg-slate-50"
-                >
-                  <span
-                    className="shrink-0 rounded-md bg-[#fdf0f2] px-2.5 py-1 font-mono text-[11px] font-bold tracking-tight"
-                    style={{ color: MAROON }}
-                  >
-                    {row.student_number}
-                  </span>
-
-                  <span className="min-w-0 grow text-[14px] font-bold text-[#182848]">
-                    {row.last_name}, {row.first_name}
-                  </span>
-
-                  <span className="text-[12px] font-medium text-slate-400">
-                    {show(record.course)}
-                    <span className="mx-1.5 text-slate-300">&bull;</span>
-                    {yearLabel(record.year_level)}
-                    <span className="mx-1.5 text-slate-300">&bull;</span>
-                    {show(record.section)}
-                  </span>
-
-                  <span
-                    className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.08em] ${
-                      STATUS_TONE[row.enrollment_status] || STATUS_FALLBACK
-                    }`}
-                  >
-                    {show(row.enrollment_status)}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+          {results.map((row) => (
+            <StudentCard key={row.student_number} row={row} onOpen={onOpen} />
+          ))}
+        </div>
       )}
-    </Panel>
+    </>
   );
 }
 
 // the token only lasts an hour, so 401 here means the session ran out
 const SESSION_EXPIRED = 'Your session has expired. Please sign in again.';
 
+// 403 means this account is not allowed to see it. refreshing will not change
+// that, so it gets its own wording instead of the "try again" one.
+const NOT_ALLOWED = 'Your account does not have access to this page.';
+
 function readError(err, fallback) {
   if (err.response?.status === 401) return SESSION_EXPIRED;
+  if (err.response?.status === 403) return NOT_ALLOWED;
 
   const errors = err.response?.data?.errors;
   if (errors) return Object.values(errors)[0][0];
 
   return fallback;
 }
+
+const INPUT_CLASS =
+  'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#80172B]/30';
 
 function TextInput({ label, value, onChange, type = 'text', min, max, step }) {
   return (
@@ -343,7 +424,7 @@ function TextInput({ label, value, onChange, type = 'text', min, max, step }) {
       max={max}
       step={step}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-md border border-slate-200 px-2.5 py-1.5 text-[13.5px] font-bold text-[#182848] focus:border-[#182848] focus:outline-none"
+      className={INPUT_CLASS}
     />
   );
 }
@@ -382,7 +463,7 @@ function SelectInput({ label, value, onChange, options }) {
       value={value}
       aria-label={label}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[13.5px] font-bold text-[#182848] focus:border-[#182848] focus:outline-none"
+      className={INPUT_CLASS}
     >
       <option value="">-</option>
       {list.map((option) => (
@@ -642,354 +723,290 @@ export default function StudentProfile() {
     setStudentNumber('');
   }
 
-  const backLink = isStaff && (
-    <button
-      type="button"
-      onClick={backToList}
-      className="mb-5 flex items-center gap-1 text-[12px] font-bold text-slate-400 hover:text-[#182848] focus:outline-none focus-visible:text-[#182848]"
-    >
-      <ChevronLeft className="h-[15px] w-[15px]" strokeWidth={2.5} />
-      Back to student records
-    </button>
+  const onList = isStaff && !studentNumber;
+
+  const title = onList ? 'Student Records' : isStaff ? 'Student Profile' : 'My Student Profile';
+
+  const description = onList
+    ? isAdmin
+      ? 'Search students by name or student number, open a record to review or update registrar details.'
+      : 'Search students by name or student number and open a record to view the profile.'
+    : isStaff
+      ? 'Personal details, academic standing and emergency contacts on file with the registrar.'
+      : 'Your personal details, academic standing and emergency contacts on file with the registrar.';
+
+  // every state gets the same back link and header, only what sits under
+  // them changes
+  const page = (content) => (
+    <div>
+      {isStaff && studentNumber && (
+        <button
+          type="button"
+          onClick={backToList}
+          className="mb-4 flex items-center gap-1.5 text-xs font-medium text-[#80172B] hover:underline"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+          Back to student records
+        </button>
+      )}
+      <ModuleHeader title={title} description={description} />
+      {content}
+    </div>
   );
 
   if (loading) {
-    return (
-      <Panel>
-        <p className="text-[13px] font-bold text-slate-400">Loading student information...</p>
-      </Panel>
-    );
+    return page(<p className="text-sm text-gray-500">Loading student information...</p>);
   }
 
   if (error) {
-    return (
-      <Panel>
-        {backLink}
-        <p className="text-[13px] font-bold text-[#182848]">{error}</p>
-        {error !== SESSION_EXPIRED && (
-          <p className="mt-2 text-[12px] font-medium text-slate-400">
+    return page(
+      <>
+        <p className="text-sm text-rose-600">{error}</p>
+        {error !== SESSION_EXPIRED && error !== NOT_ALLOWED && (
+          <p className="text-sm text-gray-500 mt-1">
             Try refreshing the page. If it keeps failing, sign out and sign in again.
           </p>
         )}
-      </Panel>
+      </>
     );
   }
 
   // staff land here first, and come back here from the back link
-  if (isStaff && !studentNumber) {
-    return (
-      <StudentSearch
-        roster={roster}
-        term={term}
-        onTerm={setTerm}
-        onOpen={setStudentNumber}
-        readOnly={!isAdmin}
-      />
+  if (onList) {
+    return page(
+      <StudentSearch roster={roster} term={term} onTerm={setTerm} onOpen={setStudentNumber} />
     );
   }
 
   // one render happens between clicking a name and the effect starting the
   // fetch, and there is no student to show yet on that pass
   if (!student) {
-    return (
-      <Panel>
-        <p className="text-[13px] font-bold text-slate-400">Loading student information...</p>
-      </Panel>
-    );
+    return page(<p className="text-sm text-gray-500">Loading student information...</p>);
   }
 
   const { personal, academic, emergency } = student;
 
-  // faculty only get to look, so no edit button and no photo upload for them
+  // faculty only get to look, so no edit button for them
   const mayEdit = isAdmin || !isStaff;
+
+  // the photo is the student's own choice, adding it and removing it both.
+  // the admin can fix the rest of the record but leaves the photo alone.
+  const mayChangePhoto = !isStaff;
 
   // the freshly picked file wins until the page is reloaded, so the portrait
   // appears the moment you choose it instead of after the upload finishes
   const photoSrc = preview || (student.profilePicture && `${API_ORIGIN}${student.profilePicture}`);
 
-  return (
-    <div className="mx-auto w-full max-w-[1280px] rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
-      {backLink}
-
-      <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-6">
-        {/* click the photo to change it, hidden input does the actual upload */}
-        <div className="shrink-0">
-          <label
-            className={`group relative flex h-[90px] w-[90px] items-center justify-center overflow-hidden rounded-xl border-2 bg-slate-100 shadow-sm ${
-              mayEdit ? 'cursor-pointer' : ''
-            }`}
-            style={{ borderColor: MAROON }}
-            title={mayEdit ? 'Click to change photo' : undefined}
-          >
-            {photoSrc ? (
-              /* object-top keeps the head in frame, centred cropping was
-                 cutting the hair off the top of a portrait shot */
-              <img
-                src={photoSrc}
-                alt={`Portrait of ${student.fullName}`}
-                className="h-full w-full object-cover object-top"
-              />
-            ) : (
-              <User className="h-10 w-10 text-slate-300" strokeWidth={1.5} />
-            )}
-
-            {/* "Change" only shows on hover, but the upload bar always shows.
-                a slow upload used to look like nothing happened at all. */}
-            {mayEdit && (
-              <span
-                className={`absolute inset-x-0 bottom-0 bg-black/55 py-1 text-center text-[9px] font-bold uppercase tracking-wider text-white transition-opacity ${
-                  uploading ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                }`}
-              >
-                {uploading ? 'Uploading...' : 'Change'}
-              </span>
-            )}
-
-            {mayEdit && (
-              <input
-                type="file"
-                accept="image/jpeg,image/png"
-                className="hidden"
-                disabled={uploading}
-                onChange={handlePhoto}
-              />
-            )}
-          </label>
-
-          {/* the student decides whether their own photo stays up, so staff
-              never see this. only while editing too, and outside the label on
-              purpose, a button inside it would open the file picker instead. */}
-          {!isStaff && editing && student.profilePicture && (
-            <button
-              type="button"
-              onClick={removePhoto}
-              disabled={uploading || removing}
-              className="mt-2 w-[90px] text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-rose-600 disabled:opacity-50"
+  return page(
+    <>
+      <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 shadow-sm">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 flex-1 items-center gap-4">
+            {/* click the photo to change it, hidden input does the actual upload */}
+            <label
+              className={`group relative flex w-20 h-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#80172B]/10 ${
+                mayChangePhoto ? 'cursor-pointer' : ''
+              }`}
+              title={mayChangePhoto ? 'Click to change photo' : undefined}
             >
-              {removing ? 'Removing...' : 'Remove photo'}
-            </button>
-          )}
+              {photoSrc ? (
+                /* object-top keeps the head in frame, centred cropping was
+                   cutting the hair off the top of a portrait shot */
+                <img
+                  src={photoSrc}
+                  alt={`Portrait of ${student.fullName}`}
+                  className="h-full w-full object-cover object-top"
+                />
+              ) : (
+                <UserRound className="w-10 h-10 text-[#80172B]" />
+              )}
 
-          {photoError && (
-            <p className="mt-2 max-w-[90px] text-[10px] font-bold leading-tight text-rose-600">
-              {photoError}
-            </p>
-          )}
-        </div>
+              {/* "Change" only shows on hover, but the upload bar always shows.
+                  a slow upload used to look like nothing happened at all. */}
+              {mayChangePhoto && (
+                <span
+                  className={`absolute inset-x-0 bottom-0 bg-black/55 pt-0.5 pb-1.5 text-center text-[9px] font-bold uppercase tracking-wider text-white transition-opacity ${
+                    uploading ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                  }`}
+                >
+                  {uploading ? 'Uploading...' : 'Change'}
+                </span>
+              )}
 
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className="rounded-md bg-[#fdf0f2] px-2.5 py-1 font-mono text-[11px] font-bold tracking-tight"
-              style={{ color: MAROON }}
-            >
-              ID: {student.idNumber}
-            </span>
-            <span className="rounded-md bg-[#e8f8ef] px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.1em] text-emerald-700">
-              {student.status}
-            </span>
+              {mayChangePhoto && (
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  className="hidden"
+                  disabled={uploading}
+                  onChange={handlePhoto}
+                />
+              )}
+            </label>
+
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <span className="bg-[#80172B]/10 text-[#80172B] font-mono text-[11px] font-bold px-2.5 py-1 rounded">
+                  ID: {student.idNumber}
+                </span>
+                <StatusPill status={student.status} />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 leading-tight break-words">
+                {student.fullName}
+              </h3>
+              <p className="text-sm font-semibold text-[#80172B]">
+                {student.program} &middot; {student.yearLevel} &middot; {student.section}
+              </p>
+              <p className="text-xs text-gray-500">{student.degree}</p>
+            </div>
           </div>
 
-          <h2 className="mt-2 text-[28px] font-extrabold leading-tight tracking-tight text-[#182848]">
-            {student.fullName}
-          </h2>
-
-          <p className="mt-1.5 text-[13px] font-bold text-[#182848]">
-            {student.program}
-            <span className="mx-2 text-slate-300">&bull;</span>
-            {student.yearLevel}
-            <span className="mx-2 text-slate-300">&bull;</span>
-            {student.section}
-          </p>
-
-          <p className="mt-1.5 text-[12px] font-medium text-slate-400">
-            {student.degree}
-            <span className="mx-1.5 text-slate-300">&bull;</span>
-            {student.registry}
-          </p>
-        </div>
-
-        {/* a student edits their own contact details, the admin edits the rest */}
-        <div className="sm:ml-auto sm:self-start">
-          {!mayEdit ? null : editing ? (
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setEditing(false)}
-                disabled={saving}
-                className="rounded-[10px] border border-slate-200 px-4 py-2 text-[13px] font-bold text-[#182848] disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={saveEdit}
-                disabled={saving}
-                className="rounded-[10px] bg-[#182848] px-4 py-2 text-[13px] font-bold text-white disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : 'Save Changes'}
-              </button>
+          {/* a student edits their own contact details, the admin edits the rest */}
+          {mayEdit && (
+            <div className="flex gap-2 sm:shrink-0">
+              {editing ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(false)}
+                    disabled={saving}
+                    className={`flex-1 sm:flex-none ${SECONDARY_BTN}`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveEdit}
+                    disabled={saving}
+                    className={`flex-1 sm:flex-none ${PRIMARY_BTN}`}
+                  >
+                    {saving ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={startEdit}
+                  className={`flex-1 sm:flex-none ${PRIMARY_BTN}`}
+                >
+                  Edit Profile
+                </button>
+              )}
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={startEdit}
-              className="rounded-[10px] bg-[#182848] px-4 py-2 text-[13px] font-bold text-white"
-            >
-              Edit Profile
-            </button>
-          )}
-
-          {saveError && (
-            <p className="mt-2 max-w-[220px] text-[12px] font-bold leading-tight text-rose-600 sm:text-right">
-              {saveError}
-            </p>
           )}
         </div>
+
+        {/* the student decides whether their own photo stays up, so staff
+            never see this. only while editing too, and outside the label on
+            purpose, a button inside it would open the file picker instead. */}
+        {!isStaff && editing && student.profilePicture && (
+          <button
+            type="button"
+            onClick={removePhoto}
+            disabled={uploading || removing}
+            className="mt-3 text-xs font-medium text-gray-500 hover:text-rose-600 disabled:opacity-50"
+          >
+            {removing ? 'Removing...' : 'Remove photo'}
+          </button>
+        )}
+
+        {photoError && <p className="mt-3 text-xs text-rose-600">{photoError}</p>}
+        {saveError && <p className="mt-3 text-sm text-rose-600">{saveError}</p>}
       </div>
 
-      <div className="mt-6 border-t border-slate-100" />
-
-      <div className="mt-7 flex flex-wrap gap-1.5 rounded-xl border border-slate-100 bg-slate-50 p-1.5">
-        {TABS.map((tab) => {
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => switchTab(tab.id)}
-              aria-pressed={isActive}
-              className={`flex items-center gap-2.5 rounded-[10px] py-2 pl-2 pr-5 transition-colors focus:outline-none ${
-                isActive ? 'bg-[#182848] text-white' : 'bg-transparent text-[#182848]'
-              }`}
-            >
-              <span
-                className={`flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md ${
-                  isActive ? 'bg-white/15' : 'bg-white'
-                }`}
-              >
-                <tab.icon
-                  className={`h-[15px] w-[15px] ${isActive ? 'text-white' : 'text-slate-400'}`}
-                  strokeWidth={2}
-                />
-              </span>
-              <span className="whitespace-nowrap text-[13px] font-bold">{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      <TabBar tabs={TABS} active={activeTab} onChange={switchTab} />
 
       {/* tab 1 - personal details */}
       {activeTab === 'personal' && (
-        <>
-          <div className="mt-6 grid grid-cols-1 gap-7 lg:grid-cols-12">
-            <InfoCard
-              icon={User}
-              iconWrapClass="bg-slate-100"
-              iconClass="text-[#182848]"
-              title="Personal Info"
-              className="lg:col-span-5"
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <InfoCard title="Personal Info">
+            <Field label="Nickname" value={personal.nickname} icon={User}>
+              {editing && (
+                <TextInput
+                  label="Nickname"
+                  value={form.nickname}
+                  onChange={(v) => setField('nickname', v)}
+                />
+              )}
+            </Field>
+
+            {/* sex and birthdate are registrar data, so only the admin
+                gets a box for them */}
+            <Field label="Sex" value={personal.sex} icon={User}>
+              {editing && isAdmin && (
+                <TextInput
+                  label="Sex"
+                  value={form.gender}
+                  onChange={(v) => setField('gender', v)}
+                />
+              )}
+            </Field>
+
+            <Field label="Civil Status" value={personal.civilStatus} icon={User}>
+              {editing && (
+                <TextInput
+                  label="Civil Status"
+                  value={form.civil_status}
+                  onChange={(v) => setField('civil_status', v)}
+                />
+              )}
+            </Field>
+
+            <Field label="Birthdate" value={personal.birthdate} icon={Calendar}>
+              {editing && isAdmin && (
+                <TextInput
+                  label="Birthdate"
+                  type="date"
+                  value={form.date_of_birth}
+                  onChange={(v) => setField('date_of_birth', v)}
+                />
+              )}
+            </Field>
+          </InfoCard>
+
+          <InfoCard title="Contact & Location">
+            <Field label="Main Contact" value={personal.mainContact} icon={Phone}>
+              {editing && (
+                <TextInput
+                  label="Main Contact"
+                  value={form.contact_number}
+                  onChange={(v) => setField('contact_number', v)}
+                />
+              )}
+            </Field>
+
+            <Field label="Personal Email" value={personal.personalEmail} icon={Mail}>
+              {editing && (
+                <TextInput
+                  label="Personal Email"
+                  value={form.email_address}
+                  onChange={(v) => setField('email_address', v)}
+                />
+              )}
+            </Field>
+
+            <Field
+              label="Address"
+              value={personal.address}
+              icon={MapPin}
+              className="sm:col-span-2"
             >
-              <Field label="Nickname" value={personal.nickname} icon={User}>
-                {editing && (
-                  <TextInput
-                    label="Nickname"
-                    value={form.nickname}
-                    onChange={(v) => setField('nickname', v)}
-                  />
-                )}
-              </Field>
-
-              {/* sex and birthdate are registrar data, so only the admin
-                  gets a box for them */}
-              <Field label="Sex" value={personal.sex} icon={User}>
-                {editing && isAdmin && (
-                  <TextInput
-                    label="Sex"
-                    value={form.gender}
-                    onChange={(v) => setField('gender', v)}
-                  />
-                )}
-              </Field>
-
-              <Field label="Civil Status" value={personal.civilStatus} icon={User}>
-                {editing && (
-                  <TextInput
-                    label="Civil Status"
-                    value={form.civil_status}
-                    onChange={(v) => setField('civil_status', v)}
-                  />
-                )}
-              </Field>
-
-              <Field label="Birthdate" value={personal.birthdate} icon={Calendar}>
-                {editing && isAdmin && (
-                  <TextInput
-                    label="Birthdate"
-                    type="date"
-                    value={form.date_of_birth}
-                    onChange={(v) => setField('date_of_birth', v)}
-                  />
-                )}
-              </Field>
-            </InfoCard>
-
-            <InfoCard
-              icon={Phone}
-              iconWrapClass="bg-slate-100"
-              iconClass="text-[#182848]"
-              title="Contact & Location"
-              className="lg:col-span-7"
-            >
-              <Field label="Main Contact" value={personal.mainContact} icon={Phone}>
-                {editing && (
-                  <TextInput
-                    label="Main Contact"
-                    value={form.contact_number}
-                    onChange={(v) => setField('contact_number', v)}
-                  />
-                )}
-              </Field>
-
-              <Field label="Personal Email" value={personal.personalEmail} icon={Mail}>
-                {editing && (
-                  <TextInput
-                    label="Personal Email"
-                    value={form.email_address}
-                    onChange={(v) => setField('email_address', v)}
-                  />
-                )}
-              </Field>
-
-              <Field
-                label="Address"
-                value={personal.address}
-                icon={MapPin}
-                className="sm:col-span-2"
-              >
-                {editing && (
-                  <TextInput
-                    label="Address"
-                    value={form.address}
-                    onChange={(v) => setField('address', v)}
-                  />
-                )}
-              </Field>
-            </InfoCard>
-          </div>
-        </>
+              {editing && (
+                <TextInput
+                  label="Address"
+                  value={form.address}
+                  onChange={(v) => setField('address', v)}
+                />
+              )}
+            </Field>
+          </InfoCard>
+        </div>
       )}
 
       {/* tab 2 - academic info */}
       {activeTab === 'academic' && (
-        <div className="mt-6 grid grid-cols-1 gap-7 lg:grid-cols-2">
-          <InfoCard
-            icon={GraduationCap}
-            iconWrapClass="bg-blue-50"
-            iconClass="text-blue-600"
-            title="Academic Enrollment"
-            subtitle="Program, Standing & Units"
-          >
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <InfoCard title="Academic Enrollment">
             {/* the whole academic tab is registrar data. a student just reads
                 it, the admin is the one who corrects it. */}
             <Field label="Degree Program" value={academic.degreeProgram} icon={BookOpen}>
@@ -1060,13 +1077,7 @@ export default function StudentProfile() {
             </Field>
           </InfoCard>
 
-          <InfoCard
-            icon={Building2}
-            iconWrapClass="bg-violet-50"
-            iconClass="text-violet-600"
-            title="Institutional & Status"
-            subtitle="Faculty, Honors & Registry"
-          >
+          <InfoCard title="Institutional & Status">
             <Field label="Enrollment Status">
               {editing && isAdmin ? (
                 <SelectInput
@@ -1076,9 +1087,7 @@ export default function StudentProfile() {
                   options={ENROLLMENT_STATUSES}
                 />
               ) : (
-                <span className="inline-flex rounded-md bg-[#e8f8ef] px-2.5 py-1 text-[12px] font-bold text-emerald-700">
-                  {academic.enrollmentStatus}
-                </span>
+                <StatusPill status={academic.enrollmentStatus} />
               )}
             </Field>
 
@@ -1116,14 +1125,8 @@ export default function StudentProfile() {
 
       {/* tab 3 - emergency contact */}
       {activeTab === 'emergency' && (
-        <div className="mt-6 grid grid-cols-1 gap-7 lg:grid-cols-2">
-          <InfoCard
-            icon={Shield}
-            iconWrapClass="bg-rose-50"
-            iconClass="text-rose-600"
-            title="Emergency Contact"
-            subtitle="Designated Person & Phone Hotline"
-          >
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <InfoCard title="Emergency Contact">
             <Field label="Contact Person Name" value={emergency.contactName} icon={User}>
               {editing && (
                 <TextInput
@@ -1162,6 +1165,6 @@ export default function StudentProfile() {
           {/* left the 2nd column empty so the card doesn't stretch the whole row */}
         </div>
       )}
-    </div>
+    </>
   );
 }
