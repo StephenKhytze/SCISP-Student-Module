@@ -1,15 +1,20 @@
 import React, { useState } from 'react';
-import { Bell, GraduationCap, Check, Shield, Crown, UserCheck, Laptop, LogOut } from 'lucide-react';
+import { Bell, GraduationCap, Check, Shield, Crown, UserCheck, Laptop, LogOut, Menu } from 'lucide-react';
 
 export default function Topbar({
-  currentUser = { name: 'Juan Dela Cruz', role: 'Student', department: 'IT', idNumber: '12345' },
+  currentUser = { name: 'Juan Dela Cruz', role: 'Student', department: 'College of Computer Studies', idNumber: '2023-00123' },
   users = [
-    { name: 'Juan Dela Cruz', role: 'Student', department: 'IT', idNumber: '12345' },
-    { name: 'Admin User', role: 'Admin', department: 'Administration', idNumber: '00001' }
+    { name: 'Juan Dela Cruz', role: 'Student', department: 'College of Computer Studies', idNumber: '2023-00123' },
+    { name: 'Prof. Maria Santos', role: 'Teacher', department: 'Faculty of Computer Studies', idNumber: 'FAC-4021' },
+    { name: 'Dr. Alejandro Reyes', role: 'Admin', department: 'Office of the Dean', idNumber: 'ADM-0091' },
+    { name: 'Engr. Marco Torres', role: 'Superadmin', department: 'IT Infrastructure & Security', idNumber: 'SA-0001' }
   ],
   onSelectUser = () => {},
   onOpenTechSpec = () => {},
   onLogout = () => {},
+  isMobileMenuOpen = false,
+  onToggleMobileMenu = () => {},
+  onCloseMobileMenu = () => {},
 }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
@@ -21,11 +26,10 @@ export default function Topbar({
   ];
 
   return (
-    <header className="h-[86px] bg-[#80172B] text-white flex items-center justify-between pr-8 select-none relative z-30 shadow-md border-b-2 border-[#651020]" style={{ paddingLeft: '32px' }}>
-      {/* Left: ABC SCHOOL Brand Logo */}
-      <div className="flex items-center space-x-3">
-        <div className="flex items-center cursor-pointer group" onClick={() => window.location.reload()}>
-          {/* ABC SCHOOL Emblem Replica matching template */}
+    <header className="h-16 md:h-[86px] bg-[#80172B] text-white flex items-center justify-between px-4 sm:px-6 md:px-8 select-none relative z-30 shadow-md border-b-2 border-[#651020]">
+      {/* Left on Desktop: ABC SCHOOL Brand Logo */}
+      <div className="hidden md:flex items-center space-x-3">
+        <div className="flex items-center cursor-pointer group">
           <div className="relative flex items-center">
             <span className="font-extrabold text-[40px] tracking-tighter text-white font-sans leading-none drop-shadow-sm">
               ABC
@@ -37,8 +41,38 @@ export default function Topbar({
         </div>
       </div>
 
+      {/* Left on Mobile: Burger Button when closed, ABC School logo when open */}
+      <div className="md:hidden flex items-center">
+        {!isMobileMenuOpen ? (
+          <button
+            type="button"
+            onClick={onToggleMobileMenu}
+            className="text-white p-1.5 -ml-1 rounded-lg hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-white/30"
+            aria-label="Open sidebar menu"
+          >
+            <Menu className="w-7 h-7 text-white" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onCloseMobileMenu}
+            className="flex items-center cursor-pointer group focus:outline-none"
+            aria-label="Close sidebar menu"
+          >
+            <div className="relative flex items-center">
+              <span className="font-extrabold text-[30px] tracking-tighter text-white font-sans leading-none drop-shadow-sm">
+                ABC
+              </span>
+              <span className="ml-1.5 px-1.5 py-[2px] bg-[#601020] border border-white/50 text-white text-[9px] font-bold tracking-wider rounded uppercase flex items-center shadow-inner self-start mt-1.5">
+                SCHOOL
+              </span>
+            </div>
+          </button>
+        )}
+      </div>
+
       {/* Right Controls: Notifications, Divider, Persona Profile */}
-      <div className="flex items-center space-x-5 sm:space-x-6">
+      <div className="flex items-center space-x-3 sm:space-x-5 md:space-x-6">
 
         {/* Notification Bell */}
         <div className="relative">
@@ -52,12 +86,12 @@ export default function Topbar({
           >
             <Bell className="w-6 h-6 text-white fill-white" />
             {/* Notification gold badge matching image */}
-            <span className="absolute top-1.5 right-1.5 w-3 h-3 bg-[#D4A373] border-2 border-[#80172B] rounded-full shadow-sm"></span>
+            <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-[#D4A373] border-2 border-[#80172B] rounded-full shadow-sm"></span>
           </button>
 
           {/* Notifications Dropdown */}
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-80 bg-white text-gray-800 rounded-lg shadow-xl border border-gray-200 py-2 z-50 text-xs animate-in fade-in duration-150">
+            <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white text-gray-800 rounded-lg shadow-xl border border-gray-200 py-2 z-50 text-xs animate-in fade-in duration-150">
               <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between font-semibold text-gray-700">
                 <span>Notifications</span>
                 <span className="bg-[#80172B]/10 text-[#80172B] px-1.5 py-0.5 rounded text-[10px]">
@@ -92,32 +126,32 @@ export default function Topbar({
           )}
         </div>
 
-        {/* Vertical Divider */}
-        <div className="h-7 w-[1px] bg-white/20" />
+        {/* Vertical Divider (Desktop/Tablet) */}
+        <div className="hidden md:block h-7 w-[1px] bg-white/20" />
 
-        {/* User Persona Profile (Exact Match to Template Image) */}
+        {/* User Persona Profile */}
         <div className="relative">
           <button
             onClick={() => {
               setShowUserDropdown(!showUserDropdown);
               setShowNotifications(false);
             }}
-            className="flex items-center space-x-4 group hover:opacity-95 transition-opacity focus:outline-none"
+            className="flex items-center space-x-3 sm:space-x-4 group hover:opacity-95 transition-opacity focus:outline-none"
             title="Switch User Role / View Profile"
           >
-            {/* Persona Name & Role */}
-            <div className="text-right flex flex-col justify-center leading-tight">
+            {/* Persona Name & Role - Hidden in mobile view as specified */}
+            <div className="hidden md:flex text-right flex-col justify-center leading-tight">
               <span className="font-bold text-base tracking-wide text-white group-hover:text-amber-100 transition-colors">
-                {currentUser.name}
+                {currentUser?.name || 'User'}
               </span>
               <span className="text-[12px] text-white/80 font-normal">
-                {currentUser.role}
+                {currentUser?.role || 'Guest'}
               </span>
             </div>
 
             {/* Circle Avatar with Graduation Cap Icon */}
-            <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center shadow-md text-[#182848] border border-white/80 flex-shrink-0 group-hover:scale-105 transition-transform">
-              <GraduationCap className="w-6 h-6 text-[#182848]" />
+            <div className="w-9 h-9 sm:w-10 sm:h-10 md:w-11 md:h-11 rounded-full bg-white flex items-center justify-center shadow-md text-[#182848] border border-white/80 flex-shrink-0 group-hover:scale-105 transition-transform">
+              <GraduationCap className="w-5 h-5 md:w-6 md:h-6 text-[#182848]" />
             </div>
           </button>
 
@@ -125,9 +159,9 @@ export default function Topbar({
           {showUserDropdown && (
             <div className="absolute right-0 mt-2 w-64 bg-white text-gray-800 rounded-lg shadow-xl border border-gray-200 py-2 z-50 animate-in fade-in duration-150">
               <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50/80">
-                <p className="text-xs font-semibold text-gray-900">{currentUser.name}</p>
-                <p className="text-[11px] text-gray-500">{currentUser.department}</p>
-                <p className="text-[10px] text-[#80172B] font-mono mt-0.5">ID: {currentUser.idNumber}</p>
+                <p className="text-xs font-semibold text-gray-900">{currentUser?.name || 'User'}</p>
+                <p className="text-[11px] text-gray-500">{currentUser?.department || 'Department'}</p>
+                <p className="text-[10px] text-[#80172B] font-mono mt-0.5">ID: {currentUser?.idNumber || 'N/A'}</p>
               </div>
 
               <div className="px-3 py-1.5 text-[10px] uppercase font-bold text-gray-400 tracking-wider">
@@ -142,7 +176,7 @@ export default function Topbar({
                     setShowUserDropdown(false);
                   }}
                   className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-gray-100 transition-colors ${
-                    currentUser.idNumber === u.idNumber ? 'bg-amber-50 font-bold text-[#80172B]' : 'text-gray-700'
+                    currentUser?.idNumber === u.idNumber ? 'bg-amber-50 font-bold text-[#80172B]' : 'text-gray-700'
                   }`}
                 >
                   <div className="flex items-center space-x-2.5">
@@ -155,7 +189,7 @@ export default function Topbar({
                       <p className="text-[10px] text-gray-500 font-normal">{u.role}</p>
                     </div>
                   </div>
-                  {currentUser.idNumber === u.idNumber && <Check className="w-3.5 h-3.5 text-[#80172B]" />}
+                  {currentUser?.idNumber === u.idNumber && <Check className="w-3.5 h-3.5 text-[#80172B]" />}
                 </button>
               ))}
 
@@ -191,3 +225,4 @@ export default function Topbar({
     </header>
   );
 }
+
