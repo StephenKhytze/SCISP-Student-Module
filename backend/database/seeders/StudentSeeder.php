@@ -192,6 +192,62 @@ class StudentSeeder extends Seeder
             ],
         ];
 
+        // subjects behind each cumulative gpa. the two who are not enrolled sit
+        // on their last finished term, which is why they still have a gpa.
+        $subjects = [
+            'C1234' => ['2026-2027', '1st Semester', [
+                ['IT-301', 'Information Management 2', 3, 1.25],
+                ['IT-302', 'Web Systems and Technologies', 3, 1.50],
+                ['IT-303', 'Network Administration', 3, 1.50],
+                ['IT-304', 'Systems Integration', 3, 1.25],
+                ['IT-305', 'Quantitative Methods', 3, 1.75],
+                ['IT-306', 'Technopreneurship', 3, 1.50],
+                ['IT-307', 'Professional Elective 1', 3, 1.25],
+            ]],
+            'C1235' => ['2026-2027', '1st Semester', [
+                ['IT-301', 'Information Management 2', 3, 1.75],
+                ['IT-302', 'Web Systems and Technologies', 3, 1.50],
+                ['IT-303', 'Network Administration', 3, 2.00],
+                ['IT-304', 'Systems Integration', 3, 1.75],
+                ['IT-305', 'Quantitative Methods', 3, 1.50],
+                ['IT-306', 'Technopreneurship', 3, 1.75],
+                ['IT-307', 'Professional Elective 1', 3, 1.75],
+            ]],
+            'C1236' => ['2026-2027', '1st Semester', [
+                ['CS-401', 'Automata and Language Theory', 3, 2.25],
+                ['CS-402', 'Compiler Design', 3, 2.50],
+                ['CS-403', 'Thesis 1', 3, 2.25],
+                ['CS-404', 'CS Elective 3', 3, 2.50],
+                ['CS-405', 'Professional Practice', 3, 2.25],
+            ]],
+            'C1237' => ['2026-2027', '1st Semester', [
+                ['IT-201', 'Data Structures and Algorithms', 3, 1.25],
+                ['IT-202', 'Object Oriented Programming', 3, 1.25],
+                ['IT-203', 'Discrete Mathematics', 3, 1.50],
+                ['IT-204', 'Platform Technologies', 3, 1.00],
+                ['IT-205', 'Integrative Programming', 3, 1.25],
+                ['IT-206', 'Human Computer Interaction', 3, 1.25],
+                ['IT-207', 'Statistics', 3, 1.50],
+                ['IT-208', 'Physical Education 3', 3, 1.25],
+            ]],
+            'C1238' => ['2025-2026', '2nd Semester', [
+                ['CS-301', 'Design and Analysis of Algorithms', 3, 3.00],
+                ['CS-302', 'Operating Systems', 3, 2.75],
+                ['CS-303', 'Software Engineering 1', 3, 3.00],
+                ['CS-304', 'Information Assurance', 3, 2.75],
+                ['CS-305', 'CS Elective 1', 3, 3.00],
+                ['CS-306', 'Technopreneurship', 3, 2.75],
+            ]],
+            'C1239' => ['2025-2026', '2nd Semester', [
+                ['IT-401', 'Capstone Project 1', 3, 2.00],
+                ['IT-402', 'Systems Administration', 3, 1.75],
+                ['IT-403', 'Information Assurance 2', 3, 2.00],
+                ['IT-404', 'IT Elective 3', 3, 1.75],
+                ['IT-405', 'Practicum Seminar', 3, 2.00],
+                ['IT-406', 'Professional Ethics', 3, 1.75],
+            ]],
+        ];
+
         foreach ($rows as $row) {
             // firstOrCreate so running the seeder again won't error on student_number
             $student = Student::firstOrCreate(
@@ -216,6 +272,26 @@ class StudentSeeder extends Seeder
                     'relationship' => $relation,
                 ]
             );
+
+            [$schoolYear, $semester, $list] = $subjects[$row['student']['student_number']];
+
+            foreach ($list as [$code, $title, $units, $grade]) {
+                $student->subjectGrades()->firstOrCreate(
+                    [
+                        'school_year' => $schoolYear,
+                        'semester' => $semester,
+                        'subject_code' => $code,
+                    ],
+                    [
+                        'subject_title' => $title,
+                        'units' => $units,
+                        'grade' => $grade,
+                    ]
+                );
+            }
+
+            // the seeded gpa is only a starting value, the grades decide it
+            $student->recalculateGpa();
         }
 
         // couple of sample logs, admin_id 2 is the Admin_User_00001 account

@@ -88,6 +88,8 @@ function toStudent(row) {
       institutionalEmail: show(row.institutional_email),
     },
 
+    grades: row.subject_grades || [],
+
     emergency: {
       contactName: show(contact.contact_name),
       contactPhone: show(contact.contact_number),
@@ -197,6 +199,73 @@ function TabBar({ tabs, active, onChange }) {
   );
 }
 
+// the marks behind the cumulative gpa. only the grade moves, the subject and
+// its units are set when the student is enrolled.
+function GradesCard({ grades, editing, canEdit, values, onGrade }) {
+  if (grades.length === 0) {
+    return (
+      <section className="bg-white border border-gray-200 rounded-xl p-5 lg:col-span-2">
+        <span className="block text-xs font-bold uppercase tracking-wide text-gray-500 mb-4">
+          Subject Grades
+        </span>
+        <p className="text-sm text-gray-500">No subjects on record yet.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="bg-white border border-gray-200 rounded-xl p-5 lg:col-span-2">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <span className="text-xs font-bold uppercase tracking-wide text-gray-500">
+          Subject Grades
+        </span>
+        <span className="text-[11px] text-gray-400">
+          {grades[0].semester}, {grades[0].school_year}
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-gray-400">
+        The cumulative GPA is the unit weighted average of these.
+      </p>
+
+      <ul className="mt-4 divide-y divide-gray-100 border-t border-gray-100">
+        {grades.map((row) => (
+          <li key={row.grade_id} className="flex items-center gap-3 py-3">
+            {/* title on top and the code under it, so a long subject name still
+                leaves the grade sitting on the right on a phone */}
+            <div className="min-w-0 grow">
+              <p className="text-sm font-medium text-gray-800 break-words">{row.subject_title}</p>
+              <p className="text-[11px] text-gray-400">
+                {row.subject_code} &middot; {row.units} units
+              </p>
+            </div>
+            <div className="w-24 shrink-0 text-right">
+              {editing && canEdit ? (
+                <TextInput
+                  label={`Grade for ${row.subject_code}`}
+                  type="number"
+                  min={GPA_BEST}
+                  max={GPA_WORST}
+                  step="0.25"
+                  value={values[row.grade_id] ?? ''}
+                  onChange={(v) => onGrade(row.grade_id, v)}
+                />
+              ) : (
+                <span
+                  className={`text-sm font-semibold ${
+                    row.grade == null ? 'text-gray-400' : 'text-gray-900'
+                  }`}
+                >
+                  {row.grade == null ? 'Not marked' : row.grade}
+                </span>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 // pass children instead of value if it needs a badge or an input. the value
 // wraps instead of getting cut off, a long email used to run past the card.
 function Field({ label, value, icon: Icon, tone = 'default', className = '', children }) {
@@ -247,14 +316,11 @@ const ADMIN_EDITABLE = [
 ];
 
 // same idea but these live in academic_records, not students
-const ADMIN_RECORD = [
-  'course',
-  'year_level',
-  'section',
-  'total_units',
-  'cumulative_gpa',
-  'academic_standing',
-];
+const ADMIN_RECORD = ['course', 'year_level', 'section', 'total_units', 'academic_standing'];
+
+// the faculty side of the record. the subject grades themselves are a
+// separate list, they do not live on academic_records.
+const GRADE_FIELDS = ['academic_standing'];
 
 // the two date columns need yyyy-mm-dd for <input type="date">
 const DATE_FIELDS = ['date_of_birth', 'date_enrolled'];
@@ -481,7 +547,14 @@ export default function StudentProfile() {
   // login saves a label, not the db role. administrator comes back as "Admin"
   // and faculty as "Teacher", so match those.
   const isAdmin = user?.role === 'Admin';
-  const isStaff = isAdmin || user?.role === 'Teacher';
+  const isFaculty = user?.role === 'Teacher';
+  const isStaff = isAdmin || isFaculty;
+
+  // the admin fixes the whole record, a faculty marks the two grade fields,
+  // a student keeps their own details. every box below checks one of these.
+  const canEditRegistrar = isAdmin;
+  const canEditGrades = isAdmin || isFaculty;
+  const canEditContact = !isStaff;
 
   // a student always lands on their own record. staff start with no record
   // open, which is what shows the search screen.
@@ -560,28 +633,38 @@ export default function StudentProfile() {
   // ?? '' so a null column starts as an empty box, not the word null
   function startEdit() {
     const raw = student.raw;
+    const record = raw.academic_records?.[0] || {};
     const next = {};
-    EDITABLE.forEach((key) => {
-      next[key] = raw[key] ?? '';
-    });
 
-    const contact = raw.emergency_contacts?.[0] || {};
-    next.emergency_contact = {
-      contact_name: contact.contact_name ?? '',
-      contact_number: contact.contact_number ?? '',
-      relationship: contact.relationship ?? '',
-    };
+    if (canEditContact) {
+      EDITABLE.forEach((key) => {
+        next[key] = raw[key] ?? '';
+      });
 
-    if (isAdmin) {
+      const contact = raw.emergency_contacts?.[0] || {};
+      next.emergency_contact = {
+        contact_name: contact.contact_name ?? '',
+        contact_number: contact.contact_number ?? '',
+        relationship: contact.relationship ?? '',
+      };
+    }
+
+    if (canEditRegistrar) {
       ADMIN_EDITABLE.forEach((key) => {
         // the api hands back a full timestamp, the date box only wants the day
         next[key] = DATE_FIELDS.includes(key) ? dateOnly(raw[key]) : (raw[key] ?? '');
       });
+    }
 
-      const record = raw.academic_records?.[0] || {};
+    if (canEditGrades) {
       next.academic_record = {};
-      ADMIN_RECORD.forEach((key) => {
+      (canEditRegistrar ? ADMIN_RECORD : GRADE_FIELDS).forEach((key) => {
         next.academic_record[key] = record[key] ?? '';
+      });
+
+      next.grades = {};
+      (raw.subject_grades || []).forEach((g) => {
+        next.grades[g.grade_id] = g.grade ?? '';
       });
     }
 
@@ -608,6 +691,10 @@ export default function StudentProfile() {
     }));
   }
 
+  function setGrade(gradeId, value) {
+    setForm((prev) => ({ ...prev, grades: { ...prev.grades, [gradeId]: value } }));
+  }
+
   function setRecord(key, value) {
     setForm((prev) => ({
       ...prev,
@@ -632,8 +719,17 @@ export default function StudentProfile() {
     setSaving(true);
     setSaveError('');
 
+    // an empty box means the subject is back to unmarked
+    const payload = { ...form };
+    if (payload.grades) {
+      payload.grades = Object.entries(payload.grades).map(([id, grade]) => ({
+        grade_id: Number(id),
+        grade: grade === '' ? null : grade,
+      }));
+    }
+
     api
-      .put(`/student-info/${studentNumber}`, form)
+      .put(`/student-info/${studentNumber}`, payload)
       .then((res) => {
         const row = res.data.data;
         setStudent(toStudent(row));
@@ -725,12 +821,12 @@ export default function StudentProfile() {
 
   const onList = isStaff && !studentNumber;
 
-  const title = onList ? 'Student Records' : isStaff ? 'Student Profile' : 'My Student Profile';
+  const title = onList ? 'Student Records' : 'Student Profile';
 
   const description = onList
     ? isAdmin
       ? 'Search students by name or student number, open a record to review or update registrar details.'
-      : 'Search students by name or student number and open a record to view the profile.'
+      : 'Search students by name or student number, open a record to view it or update grades.'
     : isStaff
       ? 'Personal details, academic standing and emergency contacts on file with the registrar.'
       : 'Your personal details, academic standing and emergency contacts on file with the registrar.';
@@ -787,7 +883,7 @@ export default function StudentProfile() {
   const { personal, academic, emergency } = student;
 
   // faculty only get to look, so no edit button for them
-  const mayEdit = isAdmin || !isStaff;
+  const mayEdit = canEditContact || canEditRegistrar || canEditGrades;
 
   // the photo is the student's own choice, adding it and removing it both.
   // the admin can fix the rest of the record but leaves the photo alone.
@@ -921,7 +1017,7 @@ export default function StudentProfile() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <InfoCard title="Personal Info">
             <Field label="Nickname" value={personal.nickname} icon={User}>
-              {editing && (
+              {editing && canEditContact && (
                 <TextInput
                   label="Nickname"
                   value={form.nickname}
@@ -933,7 +1029,7 @@ export default function StudentProfile() {
             {/* sex and birthdate are registrar data, so only the admin
                 gets a box for them */}
             <Field label="Sex" value={personal.sex} icon={User}>
-              {editing && isAdmin && (
+              {editing && canEditRegistrar && (
                 <TextInput
                   label="Sex"
                   value={form.gender}
@@ -943,7 +1039,7 @@ export default function StudentProfile() {
             </Field>
 
             <Field label="Civil Status" value={personal.civilStatus} icon={User}>
-              {editing && (
+              {editing && canEditContact && (
                 <TextInput
                   label="Civil Status"
                   value={form.civil_status}
@@ -953,7 +1049,7 @@ export default function StudentProfile() {
             </Field>
 
             <Field label="Birthdate" value={personal.birthdate} icon={Calendar}>
-              {editing && isAdmin && (
+              {editing && canEditRegistrar && (
                 <TextInput
                   label="Birthdate"
                   type="date"
@@ -966,7 +1062,7 @@ export default function StudentProfile() {
 
           <InfoCard title="Contact & Location">
             <Field label="Main Contact" value={personal.mainContact} icon={Phone}>
-              {editing && (
+              {editing && canEditContact && (
                 <TextInput
                   label="Main Contact"
                   value={form.contact_number}
@@ -976,7 +1072,7 @@ export default function StudentProfile() {
             </Field>
 
             <Field label="Personal Email" value={personal.personalEmail} icon={Mail}>
-              {editing && (
+              {editing && canEditContact && (
                 <TextInput
                   label="Personal Email"
                   value={form.email_address}
@@ -991,7 +1087,7 @@ export default function StudentProfile() {
               icon={MapPin}
               className="sm:col-span-2"
             >
-              {editing && (
+              {editing && canEditContact && (
                 <TextInput
                   label="Address"
                   value={form.address}
@@ -1010,7 +1106,7 @@ export default function StudentProfile() {
             {/* the whole academic tab is registrar data. a student just reads
                 it, the admin is the one who corrects it. */}
             <Field label="Degree Program" value={academic.degreeProgram} icon={BookOpen}>
-              {editing && isAdmin && (
+              {editing && canEditRegistrar && (
                 <TextInput
                   label="Degree Program"
                   value={form.academic_record.course}
@@ -1020,7 +1116,7 @@ export default function StudentProfile() {
             </Field>
 
             <Field label="Year Standing" value={academic.yearStanding} icon={Award}>
-              {editing && isAdmin && (
+              {editing && canEditRegistrar && (
                 <SelectInput
                   label="Year Standing"
                   value={form.academic_record.year_level}
@@ -1031,7 +1127,7 @@ export default function StudentProfile() {
             </Field>
 
             <Field label="Class Section" value={academic.classSection} icon={Users}>
-              {editing && isAdmin && (
+              {editing && canEditRegistrar && (
                 <TextInput
                   label="Class Section"
                   value={form.academic_record.section}
@@ -1040,22 +1136,11 @@ export default function StudentProfile() {
               )}
             </Field>
 
-            <Field label="Cumulative GPA" value={academic.cumulativeGpa} icon={Award} tone="green">
-              {editing && isAdmin && (
-                <TextInput
-                  label="Cumulative GPA"
-                  type="number"
-                  min={GPA_BEST}
-                  max={GPA_WORST}
-                  step="0.01"
-                  value={form.academic_record.cumulative_gpa}
-                  onChange={(v) => setRecord('cumulative_gpa', v)}
-                />
-              )}
-            </Field>
+            {/* no box, this one is counted from the subject grades below */}
+            <Field label="Cumulative GPA" value={academic.cumulativeGpa} icon={Award} tone="green" />
 
             <Field label="Enrolled Load" value={academic.enrolledLoad} icon={FileText}>
-              {editing && isAdmin && (
+              {editing && canEditRegistrar && (
                 <TextInput
                   label="Enrolled Load"
                   type="number"
@@ -1066,7 +1151,7 @@ export default function StudentProfile() {
             </Field>
 
             <Field label="Initial Enrollment" value={academic.initialEnrollment} icon={Calendar}>
-              {editing && isAdmin && (
+              {editing && canEditRegistrar && (
                 <TextInput
                   label="Initial Enrollment"
                   type="date"
@@ -1079,7 +1164,7 @@ export default function StudentProfile() {
 
           <InfoCard title="Institutional & Status">
             <Field label="Enrollment Status">
-              {editing && isAdmin ? (
+              {editing && canEditRegistrar ? (
                 <SelectInput
                   label="Enrollment Status"
                   value={form.enrollment_status}
@@ -1100,7 +1185,7 @@ export default function StudentProfile() {
               icon={Award}
               tone="amber"
             >
-              {editing && isAdmin && (
+              {editing && canEditGrades && (
                 <SelectInput
                   label="Academic Standing"
                   value={form.academic_record.academic_standing}
@@ -1111,7 +1196,7 @@ export default function StudentProfile() {
             </Field>
 
             <Field label="Institutional Email" value={academic.institutionalEmail} icon={Mail}>
-              {editing && isAdmin && (
+              {editing && canEditRegistrar && (
                 <TextInput
                   label="Institutional Email"
                   value={form.institutional_email}
@@ -1120,6 +1205,14 @@ export default function StudentProfile() {
               )}
             </Field>
           </InfoCard>
+
+          <GradesCard
+            grades={student.grades}
+            editing={editing}
+            canEdit={canEditGrades}
+            values={form.grades || {}}
+            onGrade={setGrade}
+          />
         </div>
       )}
 
@@ -1128,7 +1221,7 @@ export default function StudentProfile() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <InfoCard title="Emergency Contact">
             <Field label="Contact Person Name" value={emergency.contactName} icon={User}>
-              {editing && (
+              {editing && canEditContact && (
                 <TextInput
                   label="Contact Person Name"
                   value={form.emergency_contact.contact_name}
@@ -1143,7 +1236,7 @@ export default function StudentProfile() {
               icon={Phone}
               tone="green"
             >
-              {editing && (
+              {editing && canEditContact && (
                 <TextInput
                   label="Contact Phone Number"
                   value={form.emergency_contact.contact_number}
@@ -1153,7 +1246,7 @@ export default function StudentProfile() {
             </Field>
 
             <Field label="Relationship / Guardian" value={emergency.relationship} icon={Users}>
-              {editing && (
+              {editing && canEditContact && (
                 <TextInput
                   label="Relationship / Guardian"
                   value={form.emergency_contact.relationship}

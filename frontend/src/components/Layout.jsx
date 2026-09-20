@@ -28,7 +28,10 @@ export default function Layout() {
       {/* Container for Sidebar and Main Content */}
       <div className="flex flex-1 overflow-hidden">
         <Sidebar isMobileOpen={isMobileNavOpen} onCloseMobileNav={() => setIsMobileNavOpen(false)} currentUser={user} />
-        <main className="flex-1 overflow-y-auto p-4 sm:p-8 bg-[#f8f9fa]">
+        {/* overscroll-contain keeps the bounce inside this pane. without it the
+            scroll carries on to the page once you hit the end, and the whole
+            app drags with it */}
+        <main className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-8 bg-[#f8f9fa]">
           <Outlet />
         </main>
       </div>
