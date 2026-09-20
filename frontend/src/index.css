@@ -1,3 +1,10 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* the page itself never scrolls, only the content pane does. without this a mac
+   still rubber bands the whole app, which flashes white above the header. */
+html,
+body {
+  overscroll-behavior: none;
+}
