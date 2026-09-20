@@ -59,4 +59,29 @@ class Student extends Model
     {
         return $this->hasMany(ActivityLog::class, 'student_id', 'student_id');
     }
+
+    public function subjectGrades()
+    {
+        return $this->hasMany(SubjectGrade::class, 'student_id', 'student_id');
+    }
+
+    // the cumulative gpa is not typed in, it is the unit weighted average of
+    // every subject already marked, so it moves on its own when a grade changes
+    public function recalculateGpa(): void
+    {
+        $record = $this->academicRecords()->first();
+
+        if (! $record) {
+            return;
+        }
+
+        $marked = $this->subjectGrades()->whereNotNull('grade')->get();
+        $units = $marked->sum('units');
+
+        $record->update([
+            'cumulative_gpa' => $units > 0
+                ? round($marked->sum(fn ($g) => $g->grade * $g->units) / $units, 2)
+                : null,
+        ]);
+    }
 }
