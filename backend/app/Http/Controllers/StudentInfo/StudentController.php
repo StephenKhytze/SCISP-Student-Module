@@ -26,7 +26,7 @@ class StudentController extends Controller
     // page actually knows about
     private function findStudent($id)
     {
-        $student = Student::with(['academicRecords', 'emergencyContacts'])
+        $student = Student::with(['academicRecords', 'emergencyContacts', 'subjectGrades'])
             ->where('student_number', $id)
             ->first();
 
@@ -41,7 +41,7 @@ class StudentController extends Controller
             return null;
         }
 
-        return Student::with(['academicRecords', 'emergencyContacts'])->find($id);
+        return Student::with(['academicRecords', 'emergencyContacts', 'subjectGrades'])->find($id);
     }
 
     // only faculty and admins get to browse other students, see the use case diagram
@@ -68,11 +68,15 @@ class StudentController extends Controller
         return $this->isStaff() || $this->owns($student);
     }
 
-    // faculty only get to look. changing a record is the admin's job, or the
-    // student's own contact details.
+    private function isFaculty()
+    {
+        return Auth::user()->role === 'faculty';
+    }
+
+    // who may change something. what each one may change is in update().
     private function canEdit(Student $student)
     {
-        return $this->isAdmin() || $this->owns($student);
+        return $this->isStaff() || $this->owns($student);
     }
 
     private function notFound()
@@ -117,6 +121,19 @@ class StudentController extends Controller
         }
     }
 
+    // only the grade moves. the subject, its units and the term are set when
+    // the student is enrolled, which is not something this page does.
+    private function saveGrades(Student $student, array $rows)
+    {
+        foreach ($rows as $row) {
+            // going through the relation means an id belonging to someone else
+            // simply matches nothing
+            $student->subjectGrades()
+                ->where('grade_id', $row['grade_id'])
+                ->update(['grade' => $row['grade'] ?? null]);
+        }
+    }
+
     // GET /api/student-info
     public function index()
     {
@@ -124,7 +141,7 @@ class StudentController extends Controller
             return $this->forbidden();
         }
 
-        $students = Student::with(['academicRecords', 'emergencyContacts'])->get();
+        $students = Student::with(['academicRecords', 'emergencyContacts', 'subjectGrades'])->get();
 
         return response()->json([
             'data' => $students,
@@ -163,39 +180,49 @@ class StudentController extends Controller
             return $this->forbidden();
         }
 
-        // what a student may change about themselves, just contact details
-        $rules = [
-            'nickname' => 'nullable|string|max:50',
-            'civil_status' => 'nullable|string|max:20',
-            'contact_number' => 'nullable|string|max:20',
-            'address' => 'nullable|string|max:255',
-            'email_address' => 'nullable|email|max:150|unique:students,email_address,'
-                .$student->student_id.',student_id',
-            'emergency_contact.contact_name' => 'nullable|string|max:100',
-            'emergency_contact.contact_number' => 'nullable|string|max:20',
-            'emergency_contact.relationship' => 'nullable|string|max:50',
+        // what a faculty marks: the grade on each subject, and the standing.
+        // the cumulative gpa is not here, it is worked out from the grades.
+        // 1.00 is the highest on our scale and 5.00 the lowest.
+        $gradeRules = [
+            'grades' => 'sometimes|array',
+            'grades.*.grade_id' => 'required|integer',
+            'grades.*.grade' => 'nullable|numeric|min:1|max:5',
+            'academic_record.academic_standing' => 'nullable|in:Good Standing,'
+                ."Dean's List Scholar,President's Lister,On Probation",
         ];
 
-        // everything the student can only read is still the admin's to fix
-        if ($this->isAdmin()) {
-            $rules += [
-                'gender' => 'nullable|string|max:20',
-                'date_of_birth' => 'nullable|date',
-                'institutional_email' => 'nullable|email|max:150',
-                'enrollment_status' => 'nullable|in:Enrolled,Not Enrolled,Pending',
-                'date_enrolled' => 'nullable|date',
-                'academic_record.course' => 'nullable|string|max:100',
-                // both courses are four year programs, no 5th or 6th year
-                'academic_record.year_level' => 'nullable|integer|min:1|max:4',
-                'academic_record.section' => 'nullable|string|max:50',
-                'academic_record.total_units' => 'nullable|integer|min:0|max:99',
-                // 1.00 is the highest mark on our scale, 5.00 the lowest
-                'academic_record.cumulative_gpa' => 'nullable|numeric|min:1|max:5',
-                // the page offers these four in a dropdown, so the server only
-                // takes those four. keeps the spelling the same everywhere.
-                'academic_record.academic_standing' => 'nullable|in:Good Standing,'
-                    ."Dean's List Scholar,President's Lister,On Probation",
+        // a faculty marks grades and nothing else on the record
+        if ($this->isFaculty()) {
+            $rules = $gradeRules;
+        } else {
+            // what a student may change about themselves, just contact details
+            $rules = [
+                'nickname' => 'nullable|string|max:50',
+                'civil_status' => 'nullable|string|max:20',
+                'contact_number' => 'nullable|string|max:20',
+                'address' => 'nullable|string|max:255',
+                'email_address' => 'nullable|email|max:150|unique:students,email_address,'
+                    .$student->student_id.',student_id',
+                'emergency_contact.contact_name' => 'nullable|string|max:100',
+                'emergency_contact.contact_number' => 'nullable|string|max:20',
+                'emergency_contact.relationship' => 'nullable|string|max:50',
             ];
+
+            // everything the student can only read is still the admin's to fix
+            if ($this->isAdmin()) {
+                $rules += $gradeRules + [
+                    'gender' => 'nullable|string|max:20',
+                    'date_of_birth' => 'nullable|date',
+                    'institutional_email' => 'nullable|email|max:150',
+                    'enrollment_status' => 'nullable|in:Enrolled,Not Enrolled,Pending',
+                    'date_enrolled' => 'nullable|date',
+                    'academic_record.course' => 'nullable|string|max:100',
+                    // both courses are four year programs, no 5th or 6th year
+                    'academic_record.year_level' => 'nullable|integer|min:1|max:4',
+                    'academic_record.section' => 'nullable|string|max:50',
+                    'academic_record.total_units' => 'nullable|integer|min:0|max:99',
+                ];
+            }
         }
 
         // validate() drops keys it wasn't given a rule for, so a student posting
@@ -212,13 +239,18 @@ class StudentController extends Controller
             $this->saveAcademicRecord($student, $validated['academic_record']);
         }
 
+        if (isset($validated['grades'])) {
+            $this->saveGrades($student, $validated['grades']);
+            $student->recalculateGpa();
+        }
+
         // off the roll means no subjects this term, so the load goes to 0 with
         // the status. admin only, since only the admin can change the status.
         if ($this->isAdmin() && $student->enrollment_status === 'Not Enrolled') {
             $this->saveAcademicRecord($student, ['total_units' => 0]);
         }
 
-        $student->load(['academicRecords', 'emergencyContacts']);
+        $student->load(['academicRecords', 'emergencyContacts', 'subjectGrades']);
 
         return response()->json([
             'message' => 'Profile updated.',
@@ -256,7 +288,7 @@ class StudentController extends Controller
         $path = $request->file('photo')->store('profile-pictures', 'public');
 
         $student->update(['profile_picture' => $path]);
-        $student->load(['academicRecords', 'emergencyContacts']);
+        $student->load(['academicRecords', 'emergencyContacts', 'subjectGrades']);
 
         return response()->json([
             'message' => 'Profile picture updated.',
@@ -287,7 +319,7 @@ class StudentController extends Controller
             $student->update(['profile_picture' => null]);
         }
 
-        $student->load(['academicRecords', 'emergencyContacts']);
+        $student->load(['academicRecords', 'emergencyContacts', 'subjectGrades']);
 
         return response()->json([
             'message' => 'Profile picture removed.',
