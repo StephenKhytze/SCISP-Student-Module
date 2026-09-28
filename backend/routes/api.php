@@ -76,6 +76,11 @@ Route::middleware('auth.jwt')->group(function () {
         Route::put('/{id}', [StudentController::class, 'update']);
         Route::put('/{id}/photo', [StudentController::class, 'updatePhoto']);
         Route::delete('/{id}/photo', [StudentController::class, 'deletePhoto']);
+        Route::put('/{id}/grades/{gradeId}', [StudentController::class, 'updateGrade']);
+        Route::get('/{id}/grades/{gradeId}/history', [StudentController::class, 'gradeHistory']);
+        Route::post('/{id}/archive', [StudentController::class, 'archive']);
+        Route::post('/{id}/restore', [StudentController::class, 'restore']);
+        Route::get('/{id}/activity', [StudentController::class, 'activity']);
     });
 
     Route::prefix('faculty')->group(function () {
