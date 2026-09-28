@@ -29,6 +29,9 @@ import {
   Camera,
 } from 'lucide-react';
 import api from '../../services/api';
+// only used on the printed grade report. the app's own branding is another
+// group's, so the logo is not shown anywhere on screen.
+import schoolLogo from './abc-school-logo.png';
 
 // Group 5 - Student Information Module
 // pulls the logged in student from GET /student-info/{id}
@@ -821,6 +824,22 @@ function HistoryModal({ student, row, onClose }) {
   );
 }
 
+// the print dialog only opens once the report's logo has loaded, otherwise a
+// first print on a slow connection can come out without it. a logo that fails
+// to load still lets the report print.
+function printReport() {
+  const logo = document.querySelector('#grade-report img');
+
+  if (!logo || logo.complete) {
+    window.print();
+    return;
+  }
+
+  const go = () => window.print();
+  logo.addEventListener('load', go, { once: true });
+  logo.addEventListener('error', go, { once: true });
+}
+
 // the student info audit trail for one student, admin only. who did what,
 // with the before and after of each field that moved.
 function ActivityModal({ student, onClose }) {
@@ -893,33 +912,63 @@ function ActivityModal({ student, onClose }) {
 }
 
 // the printout. it sits outside #root so the print css can hide the whole
-// app (sidebar, topbar, buttons) and keep just this. black on white, so a
-// grayscale printer still gets everything.
+// app (sidebar, topbar, buttons, modals) and keep just this. black on white
+// with lines instead of shading, so it still reads with background graphics
+// turned off or on a grayscale printer.
 const PRINT_CSS = `
 #grade-report { display: none; }
 @media print {
-  @page { size: A4; margin: 15mm; }
+  @page { size: A4 portrait; margin: 16mm 15mm 18mm; }
   html, body { background: #fff !important; height: auto !important; overflow: visible !important; }
   body > *:not(#grade-report) { display: none !important; }
-  #grade-report { display: block; color: #000; font: 10.5pt/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; }
-  #grade-report h1 { font-size: 16pt; margin: 0; letter-spacing: 0.02em; font-weight: 800; }
-  #grade-report h2 { font-size: 12pt; margin: 2pt 0 0; font-weight: 600; }
-  #grade-report .head { border-bottom: 1.5pt solid #000; padding-bottom: 8pt; margin-bottom: 10pt; }
-  #grade-report .info { display: grid; grid-template-columns: 1fr 1fr; gap: 3pt 18pt; margin-bottom: 12pt; }
-  #grade-report .info > div { display: grid; grid-template-columns: 88pt 1fr; }
-  #grade-report b { font-weight: 600; }
+
+  /* the 1pt on each side keeps the table's outer border inside the printable
+     area, a collapsed border sits half outside the table's own width */
+  /* a column at least one printable page tall (297mm less the 16mm + 18mm
+     margins, with a little slack so it never spills onto a blank page 2), so
+     the grading note can sit at the bottom of the page */
+  #grade-report { display: flex; flex-direction: column; min-height: 258mm; padding: 0 1pt; color: #000; font: 10.5pt/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; }
+  #grade-report * { box-sizing: border-box; }
+
+  #grade-report .head { text-align: center; padding-bottom: 8pt; border-bottom: 2.5pt double #000; margin-bottom: 12pt; }
+  /* an img, not a css background, so it prints with background graphics off.
+     height only, the width follows so the emblem keeps its shape */
+  #grade-report .logo { display: block; height: 20mm; width: auto; margin: 0 auto 8pt; }
+  #grade-report .school { font-size: 19pt; font-weight: 800; letter-spacing: 0.12em; margin: 0; line-height: 1.15; }
+  #grade-report .title { font-size: 11.5pt; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; margin: 4pt 0 0; }
+
+  /* two columns of label and value. the value wraps under itself, so a long
+     program or name never runs into the column next to it */
+  #grade-report .info { display: grid; grid-template-columns: 1fr 1fr; column-gap: 20pt; row-gap: 4pt; margin: 0 0 14pt; }
+  #grade-report .info div { display: grid; grid-template-columns: 30mm 1fr; column-gap: 6pt; }
+  #grade-report .info dt { font-weight: 600; margin: 0; }
+  #grade-report .info dd { margin: 0; overflow-wrap: anywhere; }
+
   #grade-report table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  #grade-report th, #grade-report td { border: 0.75pt solid #000; padding: 4pt 6pt; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
-  #grade-report th { font-weight: 600; background: #eee; }
-  #grade-report tr { break-inside: avoid; }
+  #grade-report thead { display: table-header-group; }
+  #grade-report tr { break-inside: avoid; page-break-inside: avoid; }
+  #grade-report th, #grade-report td { border: 0.6pt solid #000; padding: 5pt 6pt; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+  /* headers only break between words, "Units" never splits into "Unit s" */
+  #grade-report th { font-weight: 700; font-size: 9.5pt; border-bottom-width: 1.5pt; overflow-wrap: normal; }
   #grade-report .c { text-align: center; }
-  #grade-report .totals { margin-top: 10pt; display: flex; gap: 24pt; }
-  #grade-report .note { margin-top: 14pt; font-size: 8.5pt; }
+  #grade-report .empty { text-align: center; padding: 12pt 6pt; }
+
+  /* kept with the last rows of the table instead of landing alone on a new page */
+  #grade-report .totals { width: 62mm; margin: 10pt 0 0 auto; border-collapse: collapse; break-inside: avoid; page-break-inside: avoid; }
+  #grade-report .totals th, #grade-report .totals td { border: none; padding: 2.5pt 0; font-size: 10.5pt; }
+  #grade-report .totals th { font-weight: 600; border-bottom: none; }
+  #grade-report .totals td { text-align: right; font-weight: 700; }
+  #grade-report .totals tr:first-child th, #grade-report .totals tr:first-child td { border-top: 1.5pt solid #000; padding-top: 5pt; }
+
+  #grade-report .note { margin: auto 0 0; padding-top: 14pt; font-size: 8.5pt; line-height: 1.45; break-inside: avoid; }
 }
 `;
 
 const REMARKS = { Passed: 'Passed', Failed: 'Failed', Incomplete: 'Incomplete', Pending: 'Not Yet Posted' };
 
+// the term printed is always the one picked in the grades card, not the
+// school year in the page header. the gpas are the same server numbers the
+// profile shows, nothing is worked out again here.
 function GradeReport({ student, term, grades, cumulativeGpa }) {
   // the record only knows the year level right now, so an older term does not
   // get today's year printed on it
@@ -930,32 +979,43 @@ function GradeReport({ student, term, grades, cumulativeGpa }) {
     (g) => g.school_year === term.school_year && g.semester === term.semester
   );
 
+  const details = [
+    ['Student Name', student.fullName],
+    ['Student No.', student.idNumber],
+    ['Program', student.program],
+    ['Year Level', isCurrent ? student.yearLevel : '-'],
+    ['Section', show(term.section)],
+    ['Academic Year', show(term.school_year)],
+    ['Semester', show(term.semester)],
+    ['Date', new Date().toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })],
+  ];
+
   return createPortal(
     <div id="grade-report" aria-hidden="true">
       <style>{PRINT_CSS}</style>
       <div className="head">
-        <h1>ABC SCHOOL</h1>
-        <h2>Student Grade Report</h2>
+        <img className="logo" src={schoolLogo} alt="ABC School logo" />
+        <p className="school">ABC SCHOOL</p>
+        <p className="title">Student Grade Report</p>
       </div>
 
-      <div className="info">
-        <div><b>Student Name:</b> {student.fullName}</div>
-        <div><b>Student No.:</b> {student.idNumber}</div>
-        <div><b>Program:</b> {student.program}</div>
-        <div><b>Year Level:</b> {isCurrent ? student.yearLevel : '-'}</div>
-        <div><b>Section:</b> {show(term.section)}</div>
-        <div><b>Academic Year:</b> {term.school_year}</div>
-        <div><b>Semester:</b> {term.semester}</div>
-        <div><b>Date Generated:</b> {new Date().toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}</div>
-      </div>
+      <dl className="info">
+        {details.map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}:</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
 
+      {/* name and instructor get the most room, units and grade the least */}
       <table>
         <colgroup>
           <col style={{ width: '13%' }} />
-          <col style={{ width: '33%' }} />
+          <col style={{ width: '30%' }} />
           <col style={{ width: '8%' }} />
-          <col style={{ width: '18%' }} />
-          <col style={{ width: '10%' }} />
+          <col style={{ width: '22%' }} />
+          <col style={{ width: '9%' }} />
           <col style={{ width: '18%' }} />
         </colgroup>
         <thead>
@@ -969,11 +1029,18 @@ function GradeReport({ student, term, grades, cumulativeGpa }) {
           </tr>
         </thead>
         <tbody>
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={6} className="empty">
+                No grade records are available for this semester.
+              </td>
+            </tr>
+          )}
           {rows.map((row) => (
             <tr key={row.grade_id}>
               <td>{row.subject_code}</td>
               <td>{row.subject_title}</td>
-              <td className="c">{row.units}</td>
+              <td className="c">{show(row.units)}</td>
               <td>{show(row.instructor)}</td>
               <td className="c">{gradeText(row)}</td>
               <td>{REMARKS[row.status] || '-'}</td>
@@ -982,15 +1049,28 @@ function GradeReport({ student, term, grades, cumulativeGpa }) {
         </tbody>
       </table>
 
-      <div className="totals">
-        <div><b>Total Units:</b> {term.units}</div>
-        <div><b>Semester GWA:</b> {gpaText(term.gpa)}</div>
-        <div><b>Cumulative GWA:</b> {gpaText(cumulativeGpa)}</div>
-      </div>
+      <table className="totals">
+        <tbody>
+          <tr>
+            <th>Total Units</th>
+            <td>{show(term.units)}</td>
+          </tr>
+          <tr>
+            <th>Semester GPA</th>
+            <td>{gpaText(term.gpa)}</td>
+          </tr>
+          <tr>
+            <th>Cumulative GPA</th>
+            <td>{gpaText(cumulativeGpa)}</td>
+          </tr>
+        </tbody>
+      </table>
 
       <p className="note">
-        GWA is the unit weighted average of posted grades (1.00 highest, 3.00 lowest passing, 5.00
-        failed). Subjects marked Incomplete or Not Yet Posted are not included.
+        Grades run from 1.00 (highest) to 3.00 (lowest passing); grades above 3.00, such as 5.00, are
+        failing. The GPA is the unit-weighted average of posted grades, failing grades included.
+        Subjects marked INC (Incomplete) or Not Yet Posted are not counted in the GPA. A GPA shown as
+        &ldquo;-&rdquo; means no grades have been posted yet.
       </p>
     </div>,
     document.body
@@ -2656,7 +2736,7 @@ export default function StudentProfile() {
             isFaculty={isFaculty}
             onEdit={setEditingGrade}
             onHistory={setHistoryRow}
-            onPrint={() => window.print()}
+            onPrint={printReport}
             notice={gradeNotice}
           />
         </div>
