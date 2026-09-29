@@ -773,3 +773,48 @@ test('every role gets the same current school year, and none when there are no r
 
     expect(signIn($this, 'Admin_User_00001')->getJson('/api/student-info')->json('meta.current_school_year'))->toBeNull();
 });
+
+test('me tells the page the database role and the student record, not the username', function () {
+    expect(signIn($this, 'Admin_User_00001')->getJson('/api/student-info/me')->json('data'))
+        ->toBe(['role' => 'administrator', 'student_number' => null])
+        ->and(signIn($this, 'Garcia_Ramon_F1002')->getJson('/api/student-info/me')->json('data'))
+        ->toBe(['role' => 'faculty', 'student_number' => null])
+        ->and(signIn($this, 'DelaCruz_Juan_C1234')->getJson('/api/student-info/me')->json('data'))
+        ->toBe(['role' => 'student', 'student_number' => 'C1234']);
+
+    $this->flushHeaders()->getJson('/api/student-info/me')->assertUnauthorized();
+});
+
+test('a linked account opens its record whatever the username looks like', function () {
+    $juan = Student::where('student_number', 'C1234')->first();
+    $account = User::create(['username' => 'juan.delacruz', 'password' => 'x', 'role' => 'student', 'status' => 'active']);
+    $juan->user_id = $account->user_id;
+    $juan->save();
+
+    signIn($this, 'juan.delacruz')->getJson('/api/student-info/me')->assertJsonPath('data.student_number', 'C1234');
+    signIn($this, 'juan.delacruz')->getJson('/api/student-info/C1234')->assertOk();
+    signIn($this, 'juan.delacruz')->putJson('/api/student-info/C1234', ['nickname' => 'JD'])->assertOk();
+
+    // once linked, an old style username can't claim the same record anymore
+    signIn($this, 'DelaCruz_Juan_C1234')->getJson('/api/student-info/C1234')->assertForbidden();
+    expect(signIn($this, 'DelaCruz_Juan_C1234')->getJson('/api/student-info/me')->json('data.student_number'))->toBeNull();
+
+    // and the link itself is never sent to the page
+    expect(signIn($this, 'juan.delacruz')->getJson('/api/student-info/C1234')->json('data'))->not->toHaveKey('user_id');
+});
+
+test('a staff account never owns a student record, even with a matching username', function () {
+    User::create(['username' => 'Staff_Person_C1234', 'password' => 'x', 'role' => 'faculty', 'status' => 'active']);
+
+    signIn($this, 'Staff_Person_C1234')->deleteJson('/api/student-info/C1234/photo')->assertForbidden();
+    expect(signIn($this, 'Staff_Person_C1234')->getJson('/api/student-info/me')->json('data.student_number'))->toBeNull();
+});
+
+test('the guideline routes under /api/students use the same checks', function () {
+    signIn($this, 'Admin_User_00001')->getJson('/api/students')->assertOk()->assertJsonPath('meta.current_school_year', '2026-2027');
+    signIn($this, 'DelaCruz_Juan_C1234')->getJson('/api/students')->assertForbidden();
+    signIn($this, 'DelaCruz_Juan_C1234')->getJson('/api/students/C1234')->assertOk();
+    signIn($this, 'DelaCruz_Juan_C1234')->getJson('/api/students/C1235')->assertForbidden();
+    signIn($this, 'Garcia_Ramon_F1002')->putJson('/api/students/C1234', ['nickname' => 'X'])->assertForbidden();
+    signIn($this, 'DelaCruz_Juan_C1234')->putJson('/api/students/C1234', ['nickname' => 'Jun2'])->assertOk();
+});

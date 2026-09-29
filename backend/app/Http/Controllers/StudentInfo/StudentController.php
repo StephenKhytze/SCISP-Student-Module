@@ -31,13 +31,27 @@ class StudentController extends Controller
         ];
     }
 
-    // no user_id in students, so we match the last part of the username to
-    // student_number (DelaCruz_Juan_C1234 -> C1234). only spot that does this.
+    // the student record of the signed in account. students.user_id is the
+    // real link. an account nobody linked yet still falls back to the old
+    // username rule (DelaCruz_Juan_C1234 -> C1234), but only onto a record no
+    // other account is linked to. staff never own a student record.
     private function currentStudent()
     {
+        if (Auth::user()->role !== 'student') {
+            return null;
+        }
+
+        $linked = Student::where('user_id', Auth::id())->first();
+
+        if ($linked) {
+            return $linked;
+        }
+
         $parts = explode('_', Auth::user()->username);
 
-        return Student::where('student_number', end($parts))->first();
+        return Student::where('student_number', end($parts))
+            ->whereNull('user_id')
+            ->first();
     }
 
     // {id} can be the row id or the student number, since that is the id the
@@ -312,6 +326,24 @@ class StudentController extends Controller
             'message' => "You are not assigned to teach {$grade->subject_code} for "
                 ."{$grade->section}, {$grade->semester} {$grade->school_year}.",
         ], 403);
+    }
+
+    // GET /api/student-info/me
+    // who is signed in, as far as this module cares: the role straight from
+    // the database and, for a student, which record is theirs. the page uses
+    // this instead of reading the username or the login's role label, so a
+    // change on the auth side doesn't quietly break the module.
+    public function me()
+    {
+        $own = $this->currentStudent();
+
+        return response()->json([
+            'data' => [
+                'role' => Auth::user()->role,
+                'student_number' => $own?->student_number,
+            ],
+            'meta' => ['current_school_year' => $this->currentSchoolYear()],
+        ]);
     }
 
     // GET /api/student-info?status=active|archived|all

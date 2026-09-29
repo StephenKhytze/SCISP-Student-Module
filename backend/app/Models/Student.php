@@ -64,9 +64,19 @@ class Student extends Model
     // so the page gets a ready path instead of building it
     protected $appends = ['profile_picture_url'];
 
+    // the account link is for the server to check against, the page has no use for it
+    protected $hidden = ['user_id'];
+
     public function getProfilePictureUrlAttribute()
     {
         return $this->profile_picture ? '/storage/'.$this->profile_picture : null;
+    }
+
+    // the login account this record belongs to. set by whoever creates the
+    // account, see the add_user_id_to_students migration.
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id', 'user_id');
     }
 
     public function academicRecords()

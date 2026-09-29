@@ -1153,21 +1153,6 @@ const ADMIN_RECORD = ['course', 'year_level', 'section', 'total_units', 'academi
 // the two date columns need yyyy-mm-dd for <input type="date">
 const DATE_FIELDS = ['date_of_birth', 'date_enrolled'];
 
-// login saves the whole account in localStorage
-function currentUser() {
-  try {
-    return JSON.parse(localStorage.getItem('user'));
-  } catch {
-    return null;
-  }
-}
-
-// no user_id column in students, so the last part of the username is the
-// student number (DelaCruz_Juan_C1234 -> C1234). that is the id we ask for.
-function myStudentNumber(user) {
-  return user?.username?.split('_').pop() || null;
-}
-
 // one card per student, laid out like the faculty card
 function StudentCard({ row, onOpen, canArchive, onArchive, onRestore }) {
   const record = row.academic_records?.[0] || {};
@@ -1761,12 +1746,14 @@ function SelectInput({ label, value, onChange, options, required = false, blank 
 }
 
 export default function StudentProfile() {
-  const user = currentUser();
+  // who is signed in, from GET /student-info/me: the role as the database has
+  // it and, for a student, their own student number. nothing here reads the
+  // username or the login's role label, so how the auth side names accounts
+  // or labels roles doesn't matter to this page.
+  const [me, setMe] = useState(null);
 
-  // login saves a label, not the db role. administrator comes back as "Admin"
-  // and faculty as "Teacher", so match those.
-  const isAdmin = user?.role === 'Admin';
-  const isFaculty = user?.role === 'Teacher';
+  const isAdmin = me?.role === 'administrator';
+  const isFaculty = me?.role === 'faculty';
   const isStaff = isAdmin || isFaculty;
 
   // the admin fixes the whole record, contact details included, and a
@@ -1778,7 +1765,7 @@ export default function StudentProfile() {
 
   // a student always lands on their own record. staff start with no record
   // open, which is what shows the search screen.
-  const [studentNumber, setStudentNumber] = useState(isStaff ? '' : myStudentNumber(user));
+  const [studentNumber, setStudentNumber] = useState('');
   const [roster, setRoster] = useState([]);
 
   // the current school year for the header, same value for every role. both
@@ -1859,6 +1846,31 @@ export default function StudentProfile() {
     };
   }, [preview]);
 
+  // first thing: find out who this is. a student goes straight to their own
+  // record, staff go on to the directory below.
+  useEffect(() => {
+    api
+      .get('/student-info/me')
+      .then((res) => {
+        const who = res.data.data;
+        setMe(who);
+        setCurrentYear(res.data.meta?.current_school_year ?? null);
+
+        if (who.role === 'student') {
+          if (who.student_number) {
+            setStudentNumber(who.student_number);
+          } else {
+            setError('No student record is linked to this account yet.');
+            setLoading(false);
+          }
+        }
+      })
+      .catch((err) => {
+        setError(readError(err, 'Unable to load your student information right now.'));
+        setLoading(false);
+      });
+  }, []);
+
   // staff get the whole list once per status, then the search box filters it
   // here instead of asking the server on every keystroke
   useEffect(() => {
@@ -1892,14 +1904,9 @@ export default function StudentProfile() {
   }
 
   useEffect(() => {
-    if (!studentNumber) {
-      // staff are still waiting on the list above, so no complaint yet
-      if (!isStaff) {
-        setError('Could not tell which student account you are signed in as.');
-        setLoading(false);
-      }
-      return;
-    }
+    // nothing to open yet. a student gets theirs from /me above, staff pick
+    // one from the directory.
+    if (!studentNumber) return;
 
     setLoading(true);
     setError('');
@@ -1922,18 +1929,13 @@ export default function StudentProfile() {
       })
       .catch((err) => {
         if (err.response?.status === 404) {
-          // usually means the students table is empty on a fresh setup
-          console.warn(
-            `No student row with student_number "${studentNumber}". ` +
-              'Run: docker compose exec backend php artisan db:seed --class=StudentSeeder'
-          );
-          setError('No student record is linked to this account yet.');
+          setError('No student record was found for this account.');
           return;
         }
         setError(readError(err, 'Unable to load your student information right now.'));
       })
       .finally(() => setLoading(false));
-  }, [studentNumber, isStaff]);
+  }, [studentNumber]);
 
   // ?? '' so a null column starts as an empty box, not the word null
   function startEdit() {
