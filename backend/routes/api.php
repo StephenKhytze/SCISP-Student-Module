@@ -72,10 +72,25 @@ Route::middleware('auth.jwt')->group(function () {
     Route::prefix('student-info')->group(function () {
         Route::get('/', [StudentController::class, 'index']);
         // Group 5: Add more student info routes here
+        // before /{id}, or "me" would be read as a student id
+        Route::get('/me', [StudentController::class, 'me']);
         Route::get('/{id}', [StudentController::class, 'show']);
         Route::put('/{id}', [StudentController::class, 'update']);
         Route::put('/{id}/photo', [StudentController::class, 'updatePhoto']);
         Route::delete('/{id}/photo', [StudentController::class, 'deletePhoto']);
+        Route::put('/{id}/grades/{gradeId}', [StudentController::class, 'updateGrade']);
+        Route::get('/{id}/grades/{gradeId}/history', [StudentController::class, 'gradeHistory']);
+        Route::post('/{id}/archive', [StudentController::class, 'archive']);
+        Route::post('/{id}/restore', [StudentController::class, 'restore']);
+        Route::get('/{id}/activity', [StudentController::class, 'activity']);
+    });
+
+    // the three endpoints the course guidelines name. same controller and
+    // same checks as /student-info above, which the template and the page use.
+    Route::prefix('students')->group(function () {
+        Route::get('/', [StudentController::class, 'index']);
+        Route::get('/{id}', [StudentController::class, 'show']);
+        Route::put('/{id}', [StudentController::class, 'update']);
     });
 
     Route::prefix('faculty')->group(function () {
