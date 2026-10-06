@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\ActivityLog;
 use App\Models\Student;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Schema;
 
 class StudentSeeder extends Seeder
 {
@@ -272,6 +273,12 @@ class StudentSeeder extends Seeder
                     'relationship' => $relation,
                 ]
             );
+
+            // the first seed migration runs this before subject_grades exists on
+            // a fresh database. the grades come in when the later one runs it again.
+            if (! Schema::hasTable('subject_grades')) {
+                continue;
+            }
 
             [$schoolYear, $semester, $list] = $subjects[$row['student']['student_number']];
 
